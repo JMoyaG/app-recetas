@@ -1,0 +1,88 @@
+[
+  {
+    "id": 1774910302491,
+    "numero": "1",
+    "ingenieroId": 1,
+    "clienteId": 3,
+    "fincaId": 2,
+    "sucursalId": 1,
+    "estado": "Entregada",
+    "createdAt": "2026-03-30T22:38:22.491Z",
+    "factura": "",
+    "observacion": "",
+    "productos": [
+      {
+        "productoId": 1,
+        "cantidad": 2,
+        "cantidadEntregada": 2
+      }
+    ],
+    "confirmadoAt": "2026-03-30T22:59:05.768Z"
+  },
+  {
+    "id": 1774911518411,
+    "numero": "2",
+    "ingenieroId": 1,
+    "clienteId": 3,
+    "fincaId": 2,
+    "sucursalId": 1,
+    "estado": "Entregada",
+    "createdAt": "2026-03-30T22:58:38.411Z",
+    "factura": "",
+    "observacion": "",
+    "productos": [
+      {
+        "productoId": 1,
+        "cantidad": 1,
+        "cantidadEntregada": 1
+      }
+    ],
+    "confirmadoAt": "2026-03-30T22:59:01.916Z"
+  },
+  {
+    "id": 1774971730481,
+    "numero": "1",
+    "ingenieroId": 1,
+    "clienteId": 3,
+    "fincaId": 2,
+    "sucursalId": 1,
+    "estado": "Entregada",
+    "createdAt": "2026-03-31T15:42:10.481Z",
+    "enviadoAt": "2026-03-31T15:42:29.535Z",
+    "fechaEnvio": "2026-03-31T15:42:29.535Z",
+    "confirmadoAt": "2026-03-31T15:43:11.051Z",
+    "fechaConfirmacion": "2026-03-31T15:43:11.051Z",
+    "factura": "1212",
+    "observacion": "",
+    "productos": [
+      {
+        "productoId": 1,
+        "cantidad": 2,
+        "cantidadEntregada": 1
+      }
+    ]
+  },
+  {
+    "id": 1774972356624,
+    "numero": "1",
+    "ingenieroId": 1,
+    "clienteId": 3,
+    "fincaId": 2,
+    "sucursalId": 2,
+    "estado": "Pendiente de Confirmar",
+    "createdAt": "2026-03-31T15:52:36.625Z",
+    "enviadoAt": "2026-03-31T15:52:53.329Z",
+    "fechaEnvio": "2026-03-31T15:52:53.329Z",
+    "confirmadoAt": "",
+    "fechaConfirmacion": "",
+    "factura": "",
+    "observacion": "",
+    "productos": [
+      {
+        "productoId": 1,
+        "cantidad": 3,
+        "cantidadEntregada": 0
+      }
+    ]
+  }
+]
