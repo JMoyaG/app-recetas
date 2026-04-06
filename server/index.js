@@ -2441,5 +2441,5 @@ app.get("/api/debug/sharepoint-columns/:listKey", authMiddleware, async (req, re
 });
 
 app.listen(PORT, () => {
-  console.log(`Servidor backend corriendo en http://localhost:${PORT}`);
+  console.log(`Servidor backend corriendo en puerto ${PORT}`);
 });
