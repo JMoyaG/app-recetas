@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:3001/api";
+const API_URL = "http:////app-recetas-o6t4.onrender.com/api";
 
 function getToken(): string | null {
   return localStorage.getItem("app_token") || localStorage.getItem("token") || null;
@@ -388,6 +388,7 @@ export async function updateUsuario(
     activo: boolean;
     ingenieroId?: number | null;
     sucursalId?: number | null;
+
   }
 ) {
   return await http<UsuarioSP>(`/usuarios/${id}`, {

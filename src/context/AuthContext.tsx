@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function login(usuario: string, password: string) {
     try {
-      const res = await fetch("http://localhost:3001/api/auth/login", {
+      const res = await fetch("https://app-recetas-o6t4.onrender.com/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
