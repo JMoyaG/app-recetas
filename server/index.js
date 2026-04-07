@@ -2007,6 +2007,20 @@ app.post("/api/recetas/ingeniero", authMiddleware, async (req, res) => {
     const payload = req.body || {};
     const productos = Array.isArray(payload.productos) ? payload.productos : [];
 
+    const rol = String(req.user?.rol || "").trim();
+    const ingenieroIdLogueado = Number(req.user?.ingenieroId || 0);
+
+    // Si quien crea es Ingeniero, SIEMPRE usamos su propio ingenieroId
+    if (rol === "Ingeniero") {
+      if (!ingenieroIdLogueado) {
+        return res.status(400).json({
+          error: "Tu usuario no tiene un ingeniero asociado",
+        });
+      }
+
+      payload.ingenieroId = ingenieroIdLogueado;
+    }
+
     if (!payload.ingenieroId || !payload.clienteId || !payload.fincaId || !payload.sucursalId) {
       return res.status(400).json({ error: "Faltan datos de cabecera de la receta" });
     }
@@ -2042,75 +2056,61 @@ app.post("/api/recetas/ingeniero", authMiddleware, async (req, res) => {
 
     await ensureNumeroReceta(Number(recetaCreated.id));
 
- for (const item of productos) {
-  const esOtroProducto = !!item.esOtroProducto;
-  const producto = productosMap.get(Number(item.productoId));
+    for (const item of productos) {
+      const esOtroProducto = !!item.esOtroProducto;
+      const producto = productosMap.get(Number(item.productoId));
 
-  if (!esOtroProducto && !producto) {
-    continue;
-  }
+      if (!esOtroProducto && !producto) continue;
 
-  const detallePayload = {
-    recetaIngenieroId: Number(recetaCreated.id),
-    productoId: esOtroProducto ? undefined : Number(item.productoId),
-    productoNombre: esOtroProducto
-      ? String(item.productoNombre || item.otroProductoNombre || "").trim()
-      : String(producto?.nombre || "").trim(),
-    codigo: esOtroProducto
-      ? String(item.codigo || "OTRO").trim()
-      : String(producto?.codigo || "").trim(),
-    unidad: esOtroProducto
-      ? String(item.unidad || "UND").trim()
-      : String(producto?.unidad || "").trim(),
-    cantidadRecetada: safeNumber(item.cantidad),
-    cantidadEntregada: 0,
-    porcentajeCumplimiento: 0,
-    dosis: String(item.dosis || "").trim(),
-    esOtroProducto,
-    otroProductoNombre: String(item.otroProductoNombre || "").trim(),
-  };
+      const detallePayload = {
+        recetaIngenieroId: Number(recetaCreated.id),
+        productoId: esOtroProducto ? undefined : Number(item.productoId),
+        productoNombre: esOtroProducto
+          ? String(item.productoNombre || item.otroProductoNombre || "").trim()
+          : String(producto?.nombre || "").trim(),
+        codigo: esOtroProducto
+          ? String(item.codigo || "OTRO").trim()
+          : String(producto?.codigo || "").trim(),
+        unidad: esOtroProducto
+          ? String(item.unidad || "UND").trim()
+          : String(producto?.unidad || "").trim(),
+        cantidadRecetada: safeNumber(item.cantidad),
+        cantidadEntregada: 0,
+        porcentajeCumplimiento: 0,
+        dosis: String(item.dosis || "").trim(),
+        esOtroProducto,
+        otroProductoNombre: esOtroProducto
+          ? String(item.otroProductoNombre || "").trim()
+          : "",
+      };
 
-  console.log("DETALLE PAYLOAD:", detallePayload);
+      const detalleFields = buildRecetaProductoFields(detallePayload, detalleColumns);
+      const detalleLookupFields = Object.fromEntries(
+        Object.entries(detalleFields).filter(([key]) => /LookupId$/i.test(String(key)))
+      );
+      const detalleBaseFields = Object.fromEntries(
+        Object.entries(detalleFields).filter(([key]) => !/LookupId$/i.test(String(key)))
+      );
 
-  const detalleFields = buildRecetaProductoFields(detallePayload, detalleColumns);
+      const detalleCreated = await createItem(
+        LIST_NAMES.recetaProducto,
+        detalleBaseFields
+      );
 
-  const detalleLookupFields = Object.fromEntries(
-    Object.entries(detalleFields).filter(([key]) => /LookupId$/i.test(String(key)))
-  );
+      await applyLookupFieldsSequentially(
+        LIST_NAMES.recetaProducto,
+        Number(detalleCreated.id),
+        detalleLookupFields
+      );
+    }
 
-  const detalleBaseFields = Object.fromEntries(
-    Object.entries(detalleFields).filter(([key]) => !/LookupId$/i.test(String(key)))
-  );
-
-  console.log("DETALLE FIELDS BASE:", detalleBaseFields);
-  console.log("DETALLE FIELDS LOOKUP:", detalleLookupFields);
-
-  const detalleCreated = await createItem(
-    LIST_NAMES.recetaProducto,
-    detalleBaseFields
-  );
-
-  if (Object.keys(detalleLookupFields).length) {
-    await applyLookupFieldsSequentially(
-      LIST_NAMES.recetaProducto,
-      Number(detalleCreated.id),
-      detalleLookupFields
-    );
-  }
-
-  const detalleGuardado = await getItem(
-    LIST_NAMES.recetaProducto,
-    Number(detalleCreated.id)
-  );
-
-  console.log("DETALLE GUARDADO:", detalleGuardado?.fields || detalleGuardado);
-}
-
-    const receta = await getRecetaById(Number(recetaCreated.id));
-    res.json(receta);
+    const recetaFinal = await getRecetaById(Number(recetaCreated.id));
+    return res.status(201).json(recetaFinal);
   } catch (error) {
     console.error("ERROR CREATE RECETA INGENIERO:", error);
-    res.status(500).json({ error: error.message || "No se pudo crear la receta" });
+    return res.status(500).json({
+      error: error.message || "No se pudo crear la receta",
+    });
   }
 });
 

@@ -874,27 +874,22 @@ export default function RecetasIngeniero() {
                     Ingeniero
                   </label>
                   <select
-                    value={form.ingenieroId}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        ingenieroId: Number(e.target.value),
-                      }))
-                    }
-                    style={{
-                      width: "100%",
-                      padding: "12px 14px",
-                      borderRadius: 12,
-                      border: "1px solid #cbd5e1",
-                    }}
-                  >
-                    <option value={0}>Seleccione</option>
-                    {ingenieros.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {ingenieroLabel(item)}
-                      </option>
-                    ))}
-                  </select>
+  value={form.ingenieroId}
+  onChange={(e) =>
+    setForm((prev) => ({
+      ...prev,
+      ingenieroId: Number(e.target.value),
+    }))
+  }
+  disabled={user?.rol === "Ingeniero"}
+>
+  <option value={0}>Seleccione...</option>
+  {ingenieros.map((ing) => (
+    <option key={ing.id} value={ing.id}>
+      {ingenieroLabel(ing)}
+    </option>
+  ))}
+</select>
                 </div>
 
                 <div>
