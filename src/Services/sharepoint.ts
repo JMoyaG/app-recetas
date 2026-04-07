@@ -1,4 +1,4 @@
-const API_URL = "http:////app-recetas-o6t4.onrender.com/api";
+const API_URL = "https:////app-recetas-o6t4.onrender.com/api";
 
 function getToken(): string | null {
   return localStorage.getItem("app_token") || localStorage.getItem("token") || null;
