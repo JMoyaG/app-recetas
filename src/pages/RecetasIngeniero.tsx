@@ -773,26 +773,30 @@ export default function RecetasIngeniero() {
       {openModal && (
         <div
           style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15,23,42,0.35)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: 24,
+              position: "fixed",
+              inset: 0,
+              background: "rgba(15,23,42,0.35)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000,
+              padding: 24,
+              overflowY: "auto",
           }}
         >
           <div
-            style={{
-              width: "100%",
-              maxWidth: 1080,
-              background: "#fff",
-              borderRadius: 22,
-              boxShadow: "0 24px 80px rgba(15,23,42,0.18)",
-              overflow: "hidden",
-            }}
-          >
+  style={{
+    width: "100%",
+    maxWidth: 1080,
+    maxHeight: "90vh",
+    background: "#fff",
+    borderRadius: 22,
+    boxShadow: "0 24px 80px rgba(15,23,42,0.18)",
+    overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+  }}
+>
             <div
               style={{
                 padding: "22px 24px 14px",
@@ -831,7 +835,14 @@ export default function RecetasIngeniero() {
               </button>
             </div>
 
-            <div style={{ padding: 24, borderTop: "1px solid #e2e8f0" }}>
+            <div
+  style={{
+    padding: 24,
+    borderTop: "1px solid #e2e8f0",
+    overflowY: "auto",
+    flex: 1,
+  }}
+>
               <div
                 style={{
                   display: "grid",
