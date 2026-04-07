@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import Select from "react-select";
 import {
   ChevronDown,
   ChevronUp,
@@ -39,6 +38,153 @@ type ProductoSeleccionado = {
   productoCodigo?: string;
   unidad?: string;
 };
+
+
+type SelectOption = {
+  value: number;
+  label: string;
+};
+
+type SearchableSelectProps = {
+  options: SelectOption[];
+  value: SelectOption | null;
+  onChange: (selected: SelectOption | null) => void;
+  placeholder: string;
+  disabled?: boolean;
+  noOptionsMessage: string;
+};
+
+function SearchableSelect({
+  options,
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+  noOptionsMessage,
+}: SearchableSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filteredOptions = useMemo(() => {
+    const term = normalizeText(search);
+    if (!term) return options;
+    return options.filter((option) => normalizeText(option.label).includes(term));
+  }, [options, search]);
+
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) setOpen((prev) => !prev);
+        }}
+        style={{
+          width: "100%",
+          minHeight: 48,
+          padding: "12px 44px 12px 14px",
+          borderRadius: 12,
+          border: "1px solid #cbd5e1",
+          background: disabled ? "#f8fafc" : "#fff",
+          color: value ? "#0f172a" : "#64748b",
+          fontSize: 15,
+          textAlign: "left",
+          cursor: disabled ? "not-allowed" : "pointer",
+          position: "relative",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {value?.label || placeholder}
+        <span
+          style={{
+            position: "absolute",
+            right: 14,
+            top: "50%",
+            transform: "translateY(-50%)",
+            color: "#94a3b8",
+            fontSize: 18,
+            lineHeight: 1,
+          }}
+        >
+          ▾
+        </span>
+      </button>
+
+      {open && !disabled && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            left: 0,
+            right: 0,
+            background: "#fff",
+            border: "1px solid #dbe2ea",
+            borderRadius: 12,
+            boxShadow: "0 18px 40px rgba(15,23,42,0.12)",
+            zIndex: 4000,
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ padding: 10, borderBottom: "1px solid #eef2f7" }}>
+            <input
+              autoFocus
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={placeholder}
+              style={{
+                width: "100%",
+                minHeight: 40,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid #cbd5e1",
+                outline: "none",
+                fontSize: 14,
+              }}
+            />
+          </div>
+          <div style={{ maxHeight: 220, overflowY: "auto" }}>
+            {filteredOptions.length === 0 ? (
+              <div style={{ padding: 12, color: "#64748b", fontSize: 14 }}>
+                {noOptionsMessage}
+              </div>
+            ) : (
+              filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(option);
+                    setOpen(false);
+                  }}
+                  style={{
+                    width: "100%",
+                    border: "none",
+                    background:
+                      Number(value?.value) === Number(option.value) ? "#f1f5f9" : "#fff",
+                    color: "#0f172a",
+                    textAlign: "left",
+                    padding: "12px 14px",
+                    cursor: "pointer",
+                    fontSize: 14,
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type FormState = {
   ingenieroId: number;
@@ -142,29 +288,29 @@ export default function RecetasIngeniero() {
   const [errorForm, setErrorForm] = useState("");
 
   function detectCurrentIngeniero(list: IngenieroSP[]) {
-  const ingenieroIdUsuario = Number(user?.ingenieroId || 0);
-  if (ingenieroIdUsuario > 0) return ingenieroIdUsuario;
+    const ingenieroIdUsuario = Number(user?.ingenieroId || 0);
+    if (ingenieroIdUsuario > 0) return ingenieroIdUsuario;
 
-  const nombreUsuario = normalizeText(user?.nombre);
-  const usuarioLogin = normalizeText(user?.usuario);
+    const nombreUsuario = normalizeText(user?.nombre);
+    const usuarioLogin = normalizeText(user?.usuario);
 
-  const match = list.find((item) => {
-    const id = Number(item.id || 0);
-    const label = normalizeText(ingenieroLabel(item));
-    const nombre = normalizeText(item.nombre);
-    const nombreCompleto = normalizeText(item.nombreCompleto);
+    const match = list.find((item) => {
+      const id = Number(item.id || 0);
+      const label = normalizeText(ingenieroLabel(item));
+      const nombre = normalizeText(item.nombre);
+      const nombreCompleto = normalizeText(item.nombreCompleto);
 
-    return (
-      (ingenieroIdUsuario > 0 && id === ingenieroIdUsuario) ||
-      label === nombreUsuario ||
-      label === usuarioLogin ||
-      nombre === nombreUsuario ||
-      nombreCompleto === nombreUsuario
-    );
-  });
+      return (
+        (ingenieroIdUsuario > 0 && id === ingenieroIdUsuario) ||
+        label === nombreUsuario ||
+        label === usuarioLogin ||
+        nombre === nombreUsuario ||
+        nombreCompleto === nombreUsuario
+      );
+    });
 
-  return match?.id || 0;
-}
+    return match?.id || 0;
+  }
 
   async function loadAll() {
     try {
@@ -219,67 +365,45 @@ export default function RecetasIngeniero() {
       (f) => Number(f.clienteId) === Number(form.clienteId)
     );
   }, [fincas, form.clienteId]);
+  const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
+
   const clienteOptions = useMemo(
-  () =>
-    clientes.map((item) => ({
-      value: Number(item.id),
-      label: `${clienteLabel(item)}${item.telefono ? ` ${item.telefono}` : ""}`,
-    })),
-  [clientes]
-);
+    () =>
+      clientes.map((item) => ({
+        value: Number(item.id),
+        label: `${clienteLabel(item)}${item.telefono ? ` ${item.telefono}` : ""}`,
+      })),
+    [clientes]
+  );
 
-const fincaOptions = useMemo(
-  () =>
-    fincasFiltradas.map((item) => ({
-      value: Number(item.id),
-      label: item.nombre || `Finca ${item.id}`,
-    })),
-  [fincasFiltradas]
-);
+  const fincaOptions = useMemo(
+    () =>
+      fincasFiltradas.map((item) => ({
+        value: Number(item.id),
+        label: item.nombre || `Finca ${item.id}`,
+      })),
+    [fincasFiltradas]
+  );
 
-const selectedClienteOption =
-  clienteOptions.find((opt) => opt.value === Number(form.clienteId)) || null;
+  const sucursalOptions = useMemo(
+    () =>
+      sucursales.map((item) => ({
+        value: Number(item.id),
+        label: item.nombre || `Sucursal ${item.id}`,
+      })),
+    [sucursales]
+  );
 
-const selectedFincaOption =
-  fincaOptions.find((opt) => opt.value === Number(form.fincaId)) || null;
+  const selectedClienteOption =
+    clienteOptions.find((opt) => opt.value === Number(form.clienteId)) || null;
 
-const selectStyles = {
-  control: (base: any) => ({
-    ...base,
-    minHeight: 48,
-    borderRadius: 12,
-    borderColor: "#cbd5e1",
-    boxShadow: "none",
-    "&:hover": {
-      borderColor: "#94a3b8",
-    },
-  }),
-  valueContainer: (base: any) => ({
-    ...base,
-    padding: "4px 10px",
-  }),
-  input: (base: any) => ({
-    ...base,
-    margin: 0,
-    padding: 0,
-  }),
-  placeholder: (base: any) => ({
-    ...base,
-    color: "#64748b",
-  }),
-  menu: (base: any) => ({
-    ...base,
-    borderRadius: 12,
-    overflow: "hidden",
-    zIndex: 2000,
-  }),
-  option: (base: any, state: any) => ({
-    ...base,
-    backgroundColor: state.isFocused ? "#f1f5f9" : "#fff",
-    color: "#0f172a",
-    cursor: "pointer",
-  }),
-};
+  const selectedFincaOption =
+    fincaOptions.find((opt) => opt.value === Number(form.fincaId)) || null;
+
+  const selectedSucursalOption =
+    sucursalOptions.find((opt) => opt.value === Number(form.sucursalId)) || null;
+
+
   const productosFiltrados = useMemo(() => {
     const term = normalizeText(form.productoSearch);
     if (!term) return productos;
@@ -452,7 +576,10 @@ const selectStyles = {
       setSaving(true);
 
       const payload = {
-        ingenieroId: Number(form.ingenieroId),
+        ingenieroId:
+          user?.rol === "Ingeniero"
+            ? Number(user?.ingenieroId || form.ingenieroId)
+            : Number(form.ingenieroId),
         clienteId: Number(form.clienteId),
         fincaId: Number(form.fincaId),
         sucursalId: Number(form.sucursalId),
@@ -863,7 +990,6 @@ const selectStyles = {
               width: "100%",
               maxWidth: 1080,
               maxHeight: "90vh",
-              margin: "24px 0",
               background: "#fff",
               borderRadius: 22,
               boxShadow: "0 24px 80px rgba(15,23,42,0.18)",
@@ -923,7 +1049,9 @@ const selectStyles = {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(2, minmax(0,1fr))",
+                  gridTemplateColumns: isMobile
+                    ? "1fr"
+                    : "repeat(2, minmax(0,1fr))",
                   gap: 16,
                 }}
               >
@@ -951,157 +1079,119 @@ const selectStyles = {
                   />
                 </div>
 
-<div>
-  <label
-    style={{
-      display: "block",
-      fontWeight: 700,
-      marginBottom: 8,
-    }}
-  >
-    Ingeniero
-  </label>
-
-  {user?.rol === "Ingeniero" ? (
-    <input
-      type="text"
-      value={
-        ingenieroLabel(
-          ingenieros.find((ing) => Number(ing.id) === Number(form.ingenieroId)) || null
-        ) || String(user?.nombre || "")
-      }
-      disabled
-      style={{
-        width: "100%",
-        padding: "12px 14px",
-        borderRadius: 12,
-        border: "1px solid #cbd5e1",
-        background: "#f8fafc",
-        color: "#475569",
-        fontSize: 15,
-      }}
-    />
-  ) : (
-    <select
-      value={form.ingenieroId}
-      onChange={(e) =>
-        setForm((prev) => ({
-          ...prev,
-          ingenieroId: Number(e.target.value),
-        }))
-      }
-      style={{
-        width: "100%",
-        padding: "12px 14px",
-        borderRadius: 12,
-        border: "1px solid #cbd5e1",
-        background: "#fff",
-        color: "#0f172a",
-        fontSize: 15,
-      }}
-    >
-      <option value={0}>Seleccione...</option>
-      {ingenieros.map((ing) => (
-        <option key={ing.id} value={ing.id}>
-          {ingenieroLabel(ing)}
-        </option>
-      ))}
-    </select>
-  )}
-</div>
+                <div>
+                  <label
+                    style={{
+                      display: "block",
+                      fontWeight: 700,
+                      marginBottom: 8,
+                    }}
+                  >
+                    Ingeniero
+                  </label>
+                  {user?.rol === "Ingeniero" ? (
+                    <input
+                      type="text"
+                      value={
+                        ingenieroLabel(
+                          ingenieros.find(
+                            (ing) => Number(ing.id) === Number(form.ingenieroId)
+                          ) || null
+                        ) || String(user?.nombre || "")
+                      }
+                      disabled
+                      style={{
+                        width: "100%",
+                        padding: "12px 14px",
+                        borderRadius: 12,
+                        border: "1px solid #cbd5e1",
+                        background: "#f8fafc",
+                        color: "#475569",
+                        fontSize: 15,
+                      }}
+                    />
+                  ) : (
+                    <select
+                      value={form.ingenieroId}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          ingenieroId: Number(e.target.value),
+                        }))
+                      }
+                      style={{
+                        width: "100%",
+                        padding: "12px 14px",
+                        borderRadius: 12,
+                        border: "1px solid #cbd5e1",
+                        background: "#fff",
+                        color: "#0f172a",
+                        fontSize: 15,
+                      }}
+                    >
+                      <option value={0}>Seleccione...</option>
+                      {ingenieros.map((ing) => (
+                        <option key={ing.id} value={ing.id}>
+                          {ingenieroLabel(ing)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
 
                 <div>
-  <label
-    style={{
-      display: "block",
-      fontWeight: 700,
-      marginBottom: 8,
-    }}
-  >
-    Cliente
-  </label>
-
-  <Select
-    options={clienteOptions}
-    value={selectedClienteOption}
-    onChange={(selected) =>
-      setForm((prev) => ({
-        ...prev,
-        clienteId: Number(selected?.value || 0),
-        fincaId: 0,
-        sucursalId: 0,
-      }))
-    }
-    placeholder="Buscar cliente..."
-    isSearchable
-    styles={selectStyles}
-    noOptionsMessage={() => "No se encontraron clientes"}
-  />
-</div>
+                  <label
+                    style={{
+                      display: "block",
+                      fontWeight: 700,
+                      marginBottom: 8,
+                    }}
+                  >
+                    Cliente
+                  </label>
+                  <SearchableSelect
+                    options={clienteOptions}
+                    value={selectedClienteOption}
+                    onChange={(selected) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        clienteId: Number(selected?.value || 0),
+                        fincaId: 0,
+                        sucursalId: 0,
+                      }))
+                    }
+                    placeholder="Buscar cliente..."
+                    noOptionsMessage="No se encontraron clientes"
+                  />
+                </div>
 
                 <div>
-  <label
-    style={{
-      display: "block",
-      fontWeight: 700,
-      marginBottom: 8,
-    }}
-  >
-    Finca
-  </label>
+                  <label
+                    style={{
+                      display: "block",
+                      fontWeight: 700,
+                      marginBottom: 8,
+                    }}
+                  >
+                    Finca
+                  </label>
+                  <SearchableSelect
+                    options={fincaOptions}
+                    value={selectedFincaOption}
+                    onChange={(selected) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        fincaId: Number(selected?.value || 0),
+                      }))
+                    }
+                    placeholder={
+                      form.clienteId ? "Buscar finca..." : "Primero selecciona un cliente"
+                    }
+                    noOptionsMessage="No se encontraron fincas"
+                  />
+                </div>
 
-  <Select
-    options={fincaOptions}
-    value={selectedFincaOption}
-    onChange={(selected) =>
-      setForm((prev) => ({
-        ...prev,
-        fincaId: Number(selected?.value || 0),
-      }))
-    }
-    placeholder={
-      form.clienteId ? "Buscar finca..." : "Primero selecciona un cliente"
-    }
-    isSearchable
-    isDisabled={!form.clienteId}
-    styles={selectStyles}
-    noOptionsMessage={() => "No se encontraron fincas"}
-  />
-</div>
-<Select
-  options={clienteOptions}
-  value={selectedClienteOption}
-  onChange={(selected) =>
-    setForm((prev) => ({
-      ...prev,
-      clienteId: Number(selected?.value || 0),
-      fincaId: 0,
-      sucursalId: 0,
-    }))
-  }
-  placeholder="Buscar cliente..."
-  isSearchable
-  styles={selectStyles}
-  noOptionsMessage={() => "No se encontraron clientes"}
-/>
-<Select
-  options={fincaOptions}
-  value={selectedFincaOption}
-  onChange={(selected) =>
-    setForm((prev) => ({
-      ...prev,
-      fincaId: Number(selected?.value || 0),
-    }))
-  }
-  placeholder={
-    form.clienteId ? "Buscar finca..." : "Primero selecciona un cliente"
-  }
-  isSearchable
-  isDisabled={!form.clienteId}
-  styles={selectStyles}
-  noOptionsMessage={() => "No se encontraron fincas"}
-/>
-                <div style={{ gridColumn: "1 / -1" }}>
+                <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
                   <label
                     style={{
                       display: "block",
@@ -1111,28 +1201,18 @@ const selectStyles = {
                   >
                     Sucursal
                   </label>
-                  <select
-                    value={form.sucursalId}
-                    onChange={(e) =>
+                  <SearchableSelect
+                    options={sucursalOptions}
+                    value={selectedSucursalOption}
+                    onChange={(selected) =>
                       setForm((prev) => ({
                         ...prev,
-                        sucursalId: Number(e.target.value),
+                        sucursalId: Number(selected?.value || 0),
                       }))
                     }
-                    style={{
-                      width: "100%",
-                      padding: "12px 14px",
-                      borderRadius: 12,
-                      border: "1px solid #cbd5e1",
-                    }}
-                  >
-                    <option value={0}>Seleccione</option>
-                    {sucursales.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.nombre}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Buscar sucursal..."
+                    noOptionsMessage="No se encontraron sucursales"
+                  />
                 </div>
               </div>
 
