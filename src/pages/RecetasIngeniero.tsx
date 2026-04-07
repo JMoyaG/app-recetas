@@ -141,16 +141,27 @@ export default function RecetasIngeniero() {
   const [errorForm, setErrorForm] = useState("");
 
   function detectCurrentIngeniero(list: IngenieroSP[]) {
-    const nombreUsuario = normalizeText(user?.nombre);
-    const usuarioLogin = normalizeText(user?.usuario);
+  const ingenieroIdUsuario = Number(user?.ingenieroId || 0);
+  if (ingenieroIdUsuario) return ingenieroIdUsuario;
 
-    const match = list.find((item) => {
-      const label = normalizeText(ingenieroLabel(item));
-      return label === nombreUsuario || label === usuarioLogin;
-    });
+  const nombreUsuario = normalizeText(user?.nombre);
+  const usuarioLogin = normalizeText(user?.usuario);
 
-    return match?.id || 0;
-  }
+  const match = list.find((item) => {
+    const label = normalizeText(ingenieroLabel(item));
+    const nombre = normalizeText(item.nombre);
+    const nombreCompleto = normalizeText(item.nombreCompleto);
+    return (
+      Number(item.id) === ingenieroIdUsuario ||
+      label === nombreUsuario ||
+      label === usuarioLogin ||
+      nombre === nombreUsuario ||
+      nombreCompleto === nombreUsuario
+    );
+  });
+
+  return match?.id || 0;
+}
 
   async function loadAll() {
     try {
