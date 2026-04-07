@@ -1068,7 +1068,39 @@ const selectStyles = {
     noOptionsMessage={() => "No se encontraron fincas"}
   />
 </div>
-
+<Select
+  options={clienteOptions}
+  value={selectedClienteOption}
+  onChange={(selected) =>
+    setForm((prev) => ({
+      ...prev,
+      clienteId: Number(selected?.value || 0),
+      fincaId: 0,
+      sucursalId: 0,
+    }))
+  }
+  placeholder="Buscar cliente..."
+  isSearchable
+  styles={selectStyles}
+  noOptionsMessage={() => "No se encontraron clientes"}
+/>
+<Select
+  options={fincaOptions}
+  value={selectedFincaOption}
+  onChange={(selected) =>
+    setForm((prev) => ({
+      ...prev,
+      fincaId: Number(selected?.value || 0),
+    }))
+  }
+  placeholder={
+    form.clienteId ? "Buscar finca..." : "Primero selecciona un cliente"
+  }
+  isSearchable
+  isDisabled={!form.clienteId}
+  styles={selectStyles}
+  noOptionsMessage={() => "No se encontraron fincas"}
+/>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label
                     style={{
