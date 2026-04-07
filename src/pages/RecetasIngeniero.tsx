@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import Select from "react-select";
 import {
   ChevronDown,
   ChevronUp,
@@ -218,7 +219,67 @@ export default function RecetasIngeniero() {
       (f) => Number(f.clienteId) === Number(form.clienteId)
     );
   }, [fincas, form.clienteId]);
+  const clienteOptions = useMemo(
+  () =>
+    clientes.map((item) => ({
+      value: Number(item.id),
+      label: `${clienteLabel(item)}${item.telefono ? ` ${item.telefono}` : ""}`,
+    })),
+  [clientes]
+);
 
+const fincaOptions = useMemo(
+  () =>
+    fincasFiltradas.map((item) => ({
+      value: Number(item.id),
+      label: item.nombre || `Finca ${item.id}`,
+    })),
+  [fincasFiltradas]
+);
+
+const selectedClienteOption =
+  clienteOptions.find((opt) => opt.value === Number(form.clienteId)) || null;
+
+const selectedFincaOption =
+  fincaOptions.find((opt) => opt.value === Number(form.fincaId)) || null;
+
+const selectStyles = {
+  control: (base: any) => ({
+    ...base,
+    minHeight: 48,
+    borderRadius: 12,
+    borderColor: "#cbd5e1",
+    boxShadow: "none",
+    "&:hover": {
+      borderColor: "#94a3b8",
+    },
+  }),
+  valueContainer: (base: any) => ({
+    ...base,
+    padding: "4px 10px",
+  }),
+  input: (base: any) => ({
+    ...base,
+    margin: 0,
+    padding: 0,
+  }),
+  placeholder: (base: any) => ({
+    ...base,
+    color: "#64748b",
+  }),
+  menu: (base: any) => ({
+    ...base,
+    borderRadius: 12,
+    overflow: "hidden",
+    zIndex: 2000,
+  }),
+  option: (base: any, state: any) => ({
+    ...base,
+    backgroundColor: state.isFocused ? "#f1f5f9" : "#fff",
+    color: "#0f172a",
+    cursor: "pointer",
+  }),
+};
   const productosFiltrados = useMemo(() => {
     const term = normalizeText(form.productoSearch);
     if (!term) return productos;
@@ -950,74 +1011,63 @@ export default function RecetasIngeniero() {
 </div>
 
                 <div>
-                  <label
-                    style={{
-                      display: "block",
-                      fontWeight: 700,
-                      marginBottom: 8,
-                    }}
-                  >
-                    Cliente
-                  </label>
-                  <select
-                    value={form.clienteId}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        clienteId: Number(e.target.value),
-                        fincaId: 0,
-                        sucursalId: 0,
-                      }))
-                    }
-                    style={{
-                      width: "100%",
-                      padding: "12px 14px",
-                      borderRadius: 12,
-                      border: "1px solid #cbd5e1",
-                    }}
-                  >
-                    <option value={0}>Seleccione</option>
-                    {clientes.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {clienteLabel(item)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+  <label
+    style={{
+      display: "block",
+      fontWeight: 700,
+      marginBottom: 8,
+    }}
+  >
+    Cliente
+  </label>
+
+  <Select
+    options={clienteOptions}
+    value={selectedClienteOption}
+    onChange={(selected) =>
+      setForm((prev) => ({
+        ...prev,
+        clienteId: Number(selected?.value || 0),
+        fincaId: 0,
+        sucursalId: 0,
+      }))
+    }
+    placeholder="Buscar cliente..."
+    isSearchable
+    styles={selectStyles}
+    noOptionsMessage={() => "No se encontraron clientes"}
+  />
+</div>
 
                 <div>
-                  <label
-                    style={{
-                      display: "block",
-                      fontWeight: 700,
-                      marginBottom: 8,
-                    }}
-                  >
-                    Finca
-                  </label>
-                  <select
-                    value={form.fincaId}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        fincaId: Number(e.target.value),
-                      }))
-                    }
-                    style={{
-                      width: "100%",
-                      padding: "12px 14px",
-                      borderRadius: 12,
-                      border: "1px solid #cbd5e1",
-                    }}
-                  >
-                    <option value={0}>Seleccione</option>
-                    {fincasFiltradas.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+  <label
+    style={{
+      display: "block",
+      fontWeight: 700,
+      marginBottom: 8,
+    }}
+  >
+    Finca
+  </label>
+
+  <Select
+    options={fincaOptions}
+    value={selectedFincaOption}
+    onChange={(selected) =>
+      setForm((prev) => ({
+        ...prev,
+        fincaId: Number(selected?.value || 0),
+      }))
+    }
+    placeholder={
+      form.clienteId ? "Buscar finca..." : "Primero selecciona un cliente"
+    }
+    isSearchable
+    isDisabled={!form.clienteId}
+    styles={selectStyles}
+    noOptionsMessage={() => "No se encontraron fincas"}
+  />
+</div>
 
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label
