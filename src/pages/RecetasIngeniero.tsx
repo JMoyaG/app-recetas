@@ -431,116 +431,107 @@ export default function RecetasIngeniero() {
     productosSeleccionados.length > 0 &&
     !saving;
 
-return (
-  <div
-    style={{
-      padding: 28,
-      height: "calc(100vh - 80px)",
-      overflowY: "auto",
-      overflowX: "hidden",
-      paddingBottom: 40,
-    }}
-  >
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        marginBottom: 24,
-        gap: 16,
-      }}
-    >
-      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            background: "#dff3ee",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#008060",
-          }}
-        >
-          <FileText size={22} />
-        </div>
-        <div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 28,
-              fontWeight: 800,
-              color: "#0f172a",
-            }}
-          >
-            Recetas Ingeniero
-          </h1>
-          <p style={{ margin: "6px 0 0", color: "#475569" }}>
-            {recetas.length} recetas registradas
-          </p>
-        </div>
-      </div>
-
-      <button
-        onClick={() => {
-          resetForm();
-          setOpenModal(true);
-        }}
-        style={{
-          border: "none",
-          background: "#179b63",
-          color: "#fff",
-          borderRadius: 12,
-          padding: "12px 18px",
-          fontWeight: 700,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          cursor: "pointer",
-        }}
-      >
-        <Plus size={16} />
-        Nueva Receta
-      </button>
-    </div>
-
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid #e2e8f0",
-        borderRadius: 16,
-        padding: 14,
-        marginBottom: 22,
-      }}
-    >
+  return (
+    <div style={{ padding: 28 }}>
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          border: "1px solid #dbe2ea",
-          borderRadius: 12,
-          padding: "12px 14px",
-          background: "#fff",
+           padding: 28,
+           height: "calc(100vh - 80px)",
+           overflowY: "auto",
+           overflowX: "hidden",
+           
         }}
       >
-        <Search size={18} color="#64748b" />
-        <input
-          type="text"
-          placeholder="Buscar recetas..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              background: "#dff3ee",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#008060",
+            }}
+          >
+            <FileText size={22} />
+          </div>
+          <div>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 28,
+                fontWeight: 800,
+                color: "#0f172a",
+              }}
+            >
+              Recetas Ingeniero
+            </h1>
+            <p style={{ margin: "6px 0 0", color: "#475569" }}>
+              {recetas.length} recetas registradas
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => {
+            resetForm();
+            setOpenModal(true);
+          }}
           style={{
             border: "none",
-            outline: "none",
-            width: "100%",
-            fontSize: 15,
+            background: "#179b63",
+            color: "#fff",
+            borderRadius: 12,
+            padding: "12px 18px",
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            cursor: "pointer",
           }}
-        />
+        >
+          <Plus size={16} />
+          Nueva Receta
+        </button>
       </div>
-    </div>
 
+      <div
+        style={{
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 16,
+          padding: 14,
+          marginBottom: 22,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            border: "1px solid #dbe2ea",
+            borderRadius: 12,
+            padding: "12px 14px",
+            background: "#fff",
+          }}
+        >
+          <Search size={18} color="#64748b" />
+          <input
+            type="text"
+            placeholder="Buscar recetas..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              border: "none",
+              outline: "none",
+              width: "100%",
+              fontSize: 15,
+            }}
+          />
+        </div>
+      </div>
 
       {loading ? (
         <div
