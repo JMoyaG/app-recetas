@@ -772,19 +772,19 @@ export default function RecetasIngeniero() {
 
       {openModal && (
         <div
-          style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(15,23,42,0.35)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 1000,
-              padding: 24,
-              overflowY: "auto",
-          }}
-        >
-          <div
+  style={{
+    position: "fixed",
+    inset: 0,
+    background: "rgba(15,23,42,0.35)",
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    zIndex: 1000,
+    padding: "24px 24px 40px",
+    overflowY: "auto",
+  }}
+>
+  <div
   style={{
     width: "100%",
     maxWidth: 1080,
