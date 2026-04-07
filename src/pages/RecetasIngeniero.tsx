@@ -142,17 +142,19 @@ export default function RecetasIngeniero() {
 
   function detectCurrentIngeniero(list: IngenieroSP[]) {
   const ingenieroIdUsuario = Number(user?.ingenieroId || 0);
-  if (ingenieroIdUsuario) return ingenieroIdUsuario;
+  if (ingenieroIdUsuario > 0) return ingenieroIdUsuario;
 
   const nombreUsuario = normalizeText(user?.nombre);
   const usuarioLogin = normalizeText(user?.usuario);
 
   const match = list.find((item) => {
+    const id = Number(item.id || 0);
     const label = normalizeText(ingenieroLabel(item));
     const nombre = normalizeText(item.nombre);
     const nombreCompleto = normalizeText(item.nombreCompleto);
+
     return (
-      Number(item.id) === ingenieroIdUsuario ||
+      (ingenieroIdUsuario > 0 && id === ingenieroIdUsuario) ||
       label === nombreUsuario ||
       label === usuarioLogin ||
       nombre === nombreUsuario ||
@@ -888,7 +890,7 @@ export default function RecetasIngeniero() {
                   />
                 </div>
 
-                <div>
+<div>
   <label
     style={{
       display: "block",
@@ -903,11 +905,9 @@ export default function RecetasIngeniero() {
     <input
       type="text"
       value={
-        ingenieros.find((ing) => Number(ing.id) === Number(form.ingenieroId))
-          ? ingenieroLabel(
-              ingenieros.find((ing) => Number(ing.id) === Number(form.ingenieroId)) || null
-            )
-          : ""
+        ingenieroLabel(
+          ingenieros.find((ing) => Number(ing.id) === Number(form.ingenieroId)) || null
+        ) || String(user?.nombre || "")
       }
       disabled
       style={{
@@ -934,6 +934,9 @@ export default function RecetasIngeniero() {
         padding: "12px 14px",
         borderRadius: 12,
         border: "1px solid #cbd5e1",
+        background: "#fff",
+        color: "#0f172a",
+        fontSize: 15,
       }}
     >
       <option value={0}>Seleccione...</option>
