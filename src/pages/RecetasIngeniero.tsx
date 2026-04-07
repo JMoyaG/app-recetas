@@ -435,11 +435,11 @@ export default function RecetasIngeniero() {
     <div style={{ padding: 28 }}>
       <div
         style={{
-           padding: 28,
-           height: "calc(100vh - 80px)",
-           overflowY: "auto",
-           overflowX: "hidden",
-           
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginBottom: 24,
+          gap: 16,
         }}
       >
         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
