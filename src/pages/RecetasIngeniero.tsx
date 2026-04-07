@@ -772,31 +772,33 @@ export default function RecetasIngeniero() {
 
       {openModal && (
         <div
-  style={{
-    position: "fixed",
-    inset: 0,
-    background: "rgba(15,23,42,0.35)",
-    display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "center",
-    zIndex: 1000,
-    padding: "24px 24px 40px",
-    overflowY: "auto",
-  }}
->
-  <div
-  style={{
-    width: "100%",
-    maxWidth: 1080,
-    maxHeight: "90vh",
-    background: "#fff",
-    borderRadius: 22,
-    boxShadow: "0 24px 80px rgba(15,23,42,0.18)",
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
-  }}
->
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,0.35)",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "24px 24px 40px",
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 1080,
+              maxHeight: "90vh",
+              margin: "24px 0",
+              background: "#fff",
+              borderRadius: 22,
+              boxShadow: "0 24px 80px rgba(15,23,42,0.18)",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+            }}
+          >
             <div
               style={{
                 padding: "22px 24px 14px",
@@ -836,13 +838,14 @@ export default function RecetasIngeniero() {
             </div>
 
             <div
-  style={{
-    padding: 24,
-    borderTop: "1px solid #e2e8f0",
-    overflowY: "auto",
-    flex: 1,
-  }}
->
+              style={{
+                padding: 24,
+                borderTop: "1px solid #e2e8f0",
+                overflowY: "auto",
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
               <div
                 style={{
                   display: "grid",
@@ -885,22 +888,30 @@ export default function RecetasIngeniero() {
                     Ingeniero
                   </label>
                   <select
-  value={form.ingenieroId}
-  onChange={(e) =>
-    setForm((prev) => ({
-      ...prev,
-      ingenieroId: Number(e.target.value),
-    }))
-  }
-  disabled={user?.rol === "Ingeniero"}
->
-  <option value={0}>Seleccione...</option>
-  {ingenieros.map((ing) => (
-    <option key={ing.id} value={ing.id}>
-      {ingenieroLabel(ing)}
-    </option>
-  ))}
-</select>
+                    value={form.ingenieroId}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        ingenieroId: Number(e.target.value),
+                      }))
+                    }
+                    disabled={user?.rol === "Ingeniero"}
+                    style={{
+                      width: "100%",
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      border: "1px solid #cbd5e1",
+                      background: user?.rol === "Ingeniero" ? "#f8fafc" : "#fff",
+                      color: "#0f172a",
+                    }}
+                  >
+                    <option value={0}>Seleccione...</option>
+                    {ingenieros.map((ing) => (
+                      <option key={ing.id} value={ing.id}>
+                        {ingenieroLabel(ing)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
