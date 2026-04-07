@@ -878,41 +878,62 @@ export default function RecetasIngeniero() {
                 </div>
 
                 <div>
-                  <label
-                    style={{
-                      display: "block",
-                      fontWeight: 700,
-                      marginBottom: 8,
-                    }}
-                  >
-                    Ingeniero
-                  </label>
-                  <select
-                    value={form.ingenieroId}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        ingenieroId: Number(e.target.value),
-                      }))
-                    }
-                    disabled={user?.rol === "Ingeniero"}
-                    style={{
-                      width: "100%",
-                      padding: "12px 14px",
-                      borderRadius: 12,
-                      border: "1px solid #cbd5e1",
-                      background: user?.rol === "Ingeniero" ? "#f8fafc" : "#fff",
-                      color: "#0f172a",
-                    }}
-                  >
-                    <option value={0}>Seleccione...</option>
-                    {ingenieros.map((ing) => (
-                      <option key={ing.id} value={ing.id}>
-                        {ingenieroLabel(ing)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+  <label
+    style={{
+      display: "block",
+      fontWeight: 700,
+      marginBottom: 8,
+    }}
+  >
+    Ingeniero
+  </label>
+
+  {user?.rol === "Ingeniero" ? (
+    <input
+      type="text"
+      value={
+        ingenieros.find((ing) => Number(ing.id) === Number(form.ingenieroId))
+          ? ingenieroLabel(
+              ingenieros.find((ing) => Number(ing.id) === Number(form.ingenieroId)) || null
+            )
+          : ""
+      }
+      disabled
+      style={{
+        width: "100%",
+        padding: "12px 14px",
+        borderRadius: 12,
+        border: "1px solid #cbd5e1",
+        background: "#f8fafc",
+        color: "#475569",
+        fontSize: 15,
+      }}
+    />
+  ) : (
+    <select
+      value={form.ingenieroId}
+      onChange={(e) =>
+        setForm((prev) => ({
+          ...prev,
+          ingenieroId: Number(e.target.value),
+        }))
+      }
+      style={{
+        width: "100%",
+        padding: "12px 14px",
+        borderRadius: 12,
+        border: "1px solid #cbd5e1",
+      }}
+    >
+      <option value={0}>Seleccione...</option>
+      {ingenieros.map((ing) => (
+        <option key={ing.id} value={ing.id}>
+          {ingenieroLabel(ing)}
+        </option>
+      ))}
+    </select>
+  )}
+</div>
 
                 <div>
                   <label
