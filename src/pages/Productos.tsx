@@ -226,7 +226,7 @@ export default function Productos() {
         <span className="muted">Kilogramos</span>
         <button className="pill ltr" onClick={() => setFiltroUnidad(filtroUnidad === "Ltr" ? "" : "Ltr")}>Ltr</button>
         <span className="muted">Litros</span>
-        <button className="pill und" onClick={() => setFiltroUnidad(filtroUnidad === "Und" ? "" : "Und")}>UND</button>
+        <button className="pill und" onClick={() => setFiltroUnidad(filtroUnidad === "UND" ? "" : "UND")}>UND</button>
         <span className="muted">Unidades</span>
       </div>
 
