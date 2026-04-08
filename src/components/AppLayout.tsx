@@ -1,70 +1,95 @@
 import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
 import { Menu } from "lucide-react";
 
 function AppLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth <= 768 : false
+  );
 
-  const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth <= 768);
+    }
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
 
   return (
     <div className="app-shell">
-      {/* Sidebar */}
       {!isMobile && <Sidebar />}
 
-{isMobile && (
-  <div
-    style={{
-      position: "fixed",
-      top: 0,
-      left: sidebarOpen ? 0 : "-260px",
-      height: "100vh",
-      zIndex: 2000,
-      transition: "left 0.3s ease",
-    }}
-  >
-    <Sidebar />
-  </div>
-)}
-
-      {/* Overlay */}
-      {isMobile && sidebarOpen && (
-        <div
-          onClick={() => setSidebarOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.3)",
-            zIndex: 1500,
-          }}
-        />
-      )}
-
-      <main className="main-content">
-        {/* Botón hamburguesa */}
-        {isMobile && (
+      {isMobile && (
+        <>
           <button
             onClick={() => setSidebarOpen(true)}
             style={{
               position: "fixed",
               top: 16,
               left: 16,
-              zIndex: 2100,
+              zIndex: 2200,
               background: "#fff",
               border: "1px solid #e2e8f0",
-              borderRadius: 10,
-              padding: 10,
+              borderRadius: 16,
+              width: 56,
+              height: 56,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               cursor: "pointer",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+              boxShadow: "0 10px 30px rgba(15,23,42,0.12)",
+            }}
+            aria-label="Abrir menú"
+          >
+            <Menu size={24} />
+          </button>
+
+          {sidebarOpen && (
+  <div
+    onClick={() => setSidebarOpen(false)}
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.6)",
+      backdropFilter: "blur(4px)",
+      zIndex: 2090,
+    }}
+  />
+)}
+
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: sidebarOpen ? 0 : "-280px",
+              width: "280px",
+              height: "100vh",
+              zIndex: 2100,
+              transition: "left 0.28s ease",
             }}
           >
-            <Menu size={20} />
-          </button>
-        )}
+            <Sidebar mobile onNavigate={() => setSidebarOpen(false)} />
+          </div>
+        </>
+      )}
 
+      <main
+        className="main-content"
+        style={{
+          width: "100%",
+          paddingTop: isMobile ? 86 : undefined,
+        }}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
