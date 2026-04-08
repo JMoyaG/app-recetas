@@ -35,22 +35,7 @@ function AppLayout() {
         <>
           <button
             onClick={() => setSidebarOpen(true)}
-            style={{
-              position: "fixed",
-              top: 16,
-              left: 16,
-              zIndex: 2200,
-              background: "#fff",
-              border: "1px solid #e2e8f0",
-              borderRadius: 14,
-              width: 52,
-              height: 52,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              boxShadow: "0 10px 25px rgba(15,23,42,0.10)",
-            }}
+            className="mobile-menu-btn"
             aria-label="Abrir menú"
           >
             <Menu size={22} />
@@ -58,39 +43,20 @@ function AppLayout() {
 
           {sidebarOpen && (
             <div
+              className="mobile-sidebar-overlay"
               onClick={() => setSidebarOpen(false)}
-              style={{
-                position: "fixed",
-                inset: 0,
-                background: "rgba(0,0,0,0.42)",
-                backdropFilter: "blur(2px)",
-                zIndex: 2000,
-              }}
             />
           )}
 
           <div
-            style={{
-              position: "fixed",
-              top: 0,
-              left: sidebarOpen ? 0 : "-280px",
-              width: 280,
-              height: "100vh",
-              zIndex: 2100,
-              transition: "left 0.28s ease",
-            }}
+            className={`mobile-sidebar-drawer ${sidebarOpen ? "open" : ""}`}
           >
             <Sidebar mobile onNavigate={() => setSidebarOpen(false)} />
           </div>
         </>
       )}
 
-      <main
-        className="main-content"
-        style={{
-          paddingTop: isMobile ? 82 : undefined,
-        }}
-      >
+      <main className="main-content">
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}

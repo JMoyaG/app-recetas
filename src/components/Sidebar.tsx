@@ -108,20 +108,10 @@ const Sidebar = ({ mobile = false, onNavigate }: SidebarProps) => {
 
   return (
     <motion.aside
-      className="sidebar"
+      className={`sidebar ${mobile ? "sidebar-mobile" : ""}`}
       initial={{ x: mobile ? -20 : -24, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
-      style={{
-        width: mobile ? 280 : 250,
-        minWidth: mobile ? 280 : 250,
-        maxWidth: mobile ? 280 : 250,
-        height: "100vh",
-        position: mobile ? "relative" : "fixed",
-        top: 0,
-        left: 0,
-        zIndex: mobile ? 2100 : 1200,
-      }}
     >
       <div className="sidebar-top">
         <motion.div
