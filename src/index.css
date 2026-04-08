@@ -705,6 +705,8 @@ input {
   .main-content {
     margin-left: 0 !important;
     padding: 82px 14px 16px !important;
+    width: 100%;
+    max-width: 100%;
   }
 
   .page-wrap {

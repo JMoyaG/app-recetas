@@ -6,23 +6,16 @@ import Sidebar from "./Sidebar";
 
 function AppLayout() {
   const location = useLocation();
-
   const [isMobile, setIsMobile] = useState(
     typeof window !== "undefined" ? window.innerWidth <= 768 : false
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     function handleResize() {
       const mobile = window.innerWidth <= 768;
       setIsMobile(mobile);
-
-      if (mobile) {
-        setCollapsed(false);
-      } else {
-        setSidebarOpen(false);
-      }
+      if (!mobile) setSidebarOpen(false);
     }
 
     handleResize();
@@ -31,56 +24,46 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    if (isMobile) {
-      setSidebarOpen(false);
-    }
+    if (isMobile) setSidebarOpen(false);
   }, [location.pathname, isMobile]);
-
-  const desktopSidebarWidth = collapsed ? 84 : 250;
 
   return (
     <div className="app-shell">
-      <button
-        onClick={() => {
-          if (isMobile) {
-            setSidebarOpen(true);
-          } else {
-            setCollapsed((prev) => !prev);
-          }
-        }}
-        style={{
-          position: "fixed",
-          top: 16,
-          left: 16,
-          zIndex: 2200,
-          background: "#fff",
-          border: "1px solid #e2e8f0",
-          borderRadius: 14,
-          width: 50,
-          height: 50,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer",
-          boxShadow: "0 10px 25px rgba(15,23,42,0.10)",
-        }}
-        aria-label="Abrir menú"
-      >
-        <Menu size={22} />
-      </button>
-
-      {!isMobile && <Sidebar collapsed={collapsed} />}
+      {!isMobile && <Sidebar />}
 
       {isMobile && (
         <>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            style={{
+              position: "fixed",
+              top: 16,
+              left: 16,
+              zIndex: 2200,
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              borderRadius: 14,
+              width: 52,
+              height: 52,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              boxShadow: "0 10px 25px rgba(15,23,42,0.10)",
+            }}
+            aria-label="Abrir menú"
+          >
+            <Menu size={22} />
+          </button>
+
           {sidebarOpen && (
             <div
               onClick={() => setSidebarOpen(false)}
               style={{
                 position: "fixed",
                 inset: 0,
-                background: "rgba(0,0,0,0.45)",
-                backdropFilter: "blur(3px)",
+                background: "rgba(0,0,0,0.42)",
+                backdropFilter: "blur(2px)",
                 zIndex: 2000,
               }}
             />
@@ -105,10 +88,7 @@ function AppLayout() {
       <main
         className="main-content"
         style={{
-          width: "100%",
-          paddingTop: 82,
-          marginLeft: !isMobile ? desktopSidebarWidth : 0,
-          transition: "margin-left 0.25s ease",
+          paddingTop: isMobile ? 82 : undefined,
         }}
       >
         <AnimatePresence mode="wait">

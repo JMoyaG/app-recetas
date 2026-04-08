@@ -27,75 +27,70 @@ type MenuItem = {
 type SidebarProps = {
   mobile?: boolean;
   onNavigate?: () => void;
-  collapsed?: boolean;
 };
 
-const Sidebar = ({
-  mobile = false,
-  onNavigate,
-  collapsed = false,
-}: SidebarProps) => {
+const Sidebar = ({ mobile = false, onNavigate }: SidebarProps) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const items: MenuItem[] = [
     {
       to: "/",
-      icon: <House size={18} />,
+      icon: <House size={16} />,
       label: "Inicio",
       roles: ["Mantenimiento", "Administrativo", "Ingeniero", "Sucursal"],
     },
     {
       to: "/clientes",
-      icon: <Users size={18} />,
+      icon: <Users size={16} />,
       label: "Clientes",
       roles: ["Mantenimiento", "Administrativo"],
     },
     {
       to: "/ingenieros",
-      icon: <UserRound size={18} />,
+      icon: <UserRound size={16} />,
       label: "Ingenieros",
       roles: ["Mantenimiento", "Administrativo"],
     },
     {
       to: "/fincas",
-      icon: <MapPin size={18} />,
+      icon: <MapPin size={16} />,
       label: "Fincas",
       roles: ["Mantenimiento", "Administrativo", "Ingeniero"],
     },
     {
       to: "/sucursales",
-      icon: <Building2 size={18} />,
+      icon: <Building2 size={16} />,
       label: "Sucursales",
       roles: ["Mantenimiento", "Administrativo"],
     },
     {
       to: "/productos",
-      icon: <Package size={18} />,
+      icon: <Package size={16} />,
       label: "Productos",
       roles: ["Mantenimiento", "Administrativo", "Ingeniero", "Sucursal"],
     },
     {
       to: "/recetas-ingeniero",
-      icon: <FileText size={18} />,
+      icon: <FileText size={16} />,
       label: "Recetas Ingeniero",
       roles: ["Mantenimiento", "Ingeniero"],
     },
     {
       to: "/historial",
-      icon: <History size={18} />,
+      icon: <History size={16} />,
       label: "Historial",
       roles: ["Mantenimiento", "Administrativo"],
     },
     {
       to: "/recetas-sucursales",
-      icon: <ClipboardList size={18} />,
+      icon: <ClipboardList size={16} />,
       label: "Recetas Sucursales",
       roles: ["Mantenimiento", "Sucursal"],
     },
     {
       to: "/gestion-usuarios",
-      icon: <Settings size={18} />,
+      icon: <Settings size={16} />,
       label: "Gestión Usuarios",
       roles: ["Mantenimiento"],
     },
@@ -111,8 +106,6 @@ const Sidebar = ({
     onNavigate?.();
   }
 
-  const width = mobile ? 280 : collapsed ? 84 : 250;
-
   return (
     <motion.aside
       className="sidebar"
@@ -120,44 +113,30 @@ const Sidebar = ({
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
       style={{
-        width,
-        minWidth: width,
-        maxWidth: width,
+        width: mobile ? 280 : 250,
+        minWidth: mobile ? 280 : 250,
+        maxWidth: mobile ? 280 : 250,
         height: "100vh",
         position: mobile ? "relative" : "fixed",
         top: 0,
         left: 0,
-        background: "#ffffff",
-        borderRight: "1px solid #e8ecef",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        transition: "width 0.25s ease",
-        overflow: "hidden",
         zIndex: mobile ? 2100 : 1200,
       }}
     >
-      <div className="sidebar-top" style={{ padding: collapsed && !mobile ? "18px 10px 16px" : "18px 12px 16px" }}>
+      <div className="sidebar-top">
         <motion.div
           className="brand"
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05, duration: 0.3 }}
-          style={{
-            justifyContent: collapsed && !mobile ? "center" : "flex-start",
-            padding: collapsed && !mobile ? "2px 0 12px" : undefined,
-          }}
         >
           <div className="brand-icon">
             <Leaf size={18} />
           </div>
-
-          {(!collapsed || mobile) && (
-            <div>
-              <div className="brand-title">AgroRecetas</div>
-              <div className="brand-subtitle">Sistema de Gestión</div>
-            </div>
-          )}
+          <div>
+            <div className="brand-title">AgroRecetas</div>
+            <div className="brand-subtitle">Sistema de Gestión</div>
+          </div>
         </motion.div>
 
         <nav className="sidebar-nav">
@@ -175,37 +154,30 @@ const Sidebar = ({
                 className={({ isActive }) =>
                   `sidebar-link${isActive ? " active" : ""}`
                 }
-                title={collapsed && !mobile ? item.label : undefined}
-                style={{
-                  justifyContent: collapsed && !mobile ? "center" : "flex-start",
-                  padding: collapsed && !mobile ? "0 0" : undefined,
-                }}
               >
                 {item.icon}
-                {(!collapsed || mobile) && <span>{item.label}</span>}
+                <span>{item.label}</span>
               </NavLink>
             </motion.div>
           ))}
         </nav>
       </div>
 
-      {(!collapsed || mobile) && (
-        <motion.div
-          className="sidebar-bottom"
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.3 }}
-        >
-          <div className="user-role">{user?.nombre}</div>
-          <div className="user-email">{user?.email || "-"}</div>
-          <div className="user-status">{user?.rol}</div>
+      <motion.div
+        className="sidebar-bottom"
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2, duration: 0.3 }}
+      >
+        <div className="user-role">{user?.nombre}</div>
+        <div className="user-email">{user?.email || "-"}</div>
+        <div className="user-status">{user?.rol}</div>
 
-          <button className="logout-btn" onClick={handleLogout}>
-            <LogOut size={15} />
-            <span>Cerrar Sesión</span>
-          </button>
-        </motion.div>
-      )}
+        <button className="logout-btn" onClick={handleLogout}>
+          <LogOut size={15} />
+          <span>Cerrar Sesión</span>
+        </button>
+      </motion.div>
     </motion.aside>
   );
 };
