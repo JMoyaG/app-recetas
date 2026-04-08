@@ -24,7 +24,12 @@ type MenuItem = {
   roles: UserRole[];
 };
 
-const Sidebar = () => {
+type SidebarProps = {
+  mobile?: boolean;
+  onNavigate?: () => void;
+};
+
+const Sidebar = ({ mobile = false, onNavigate }: SidebarProps) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -98,14 +103,24 @@ const Sidebar = () => {
   function handleLogout() {
     logout();
     navigate("/login");
+    onNavigate?.();
   }
 
   return (
     <motion.aside
       className="sidebar"
-      initial={{ x: -24, opacity: 0 }}
+      initial={{ x: mobile ? -16 : -24, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
-      transition={{ duration: 0.35, ease: "easeOut" }}
+      transition={{ duration: 0.28, ease: "easeOut" }}
+      style={{
+        width: mobile ? "100%" : undefined,
+        height: "100vh",
+        background: "#fff",
+        borderRight: "1px solid #e5e7eb",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+      }}
     >
       <div className="sidebar-top">
         <motion.div
@@ -113,6 +128,9 @@ const Sidebar = () => {
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05, duration: 0.3 }}
+          style={{
+            padding: mobile ? "22px 20px 8px" : undefined,
+          }}
         >
           <div className="brand-icon">
             <Leaf size={18} />
@@ -123,7 +141,12 @@ const Sidebar = () => {
           </div>
         </motion.div>
 
-        <nav className="sidebar-nav">
+        <nav
+          className="sidebar-nav"
+          style={{
+            padding: mobile ? "8px 14px 0" : undefined,
+          }}
+        >
           {visibleItems.map((item, index) => (
             <motion.div
               key={item.to}
@@ -134,6 +157,7 @@ const Sidebar = () => {
               <NavLink
                 to={item.to}
                 end={item.to === "/"}
+                onClick={() => onNavigate?.()}
                 className={({ isActive }) =>
                   `sidebar-link${isActive ? " active" : ""}`
                 }
@@ -151,6 +175,9 @@ const Sidebar = () => {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2, duration: 0.3 }}
+        style={{
+          padding: mobile ? "18px 20px 28px" : undefined,
+        }}
       >
         <div className="user-role">{user?.nombre}</div>
         <div className="user-email">{user?.email || "-"}</div>

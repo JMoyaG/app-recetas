@@ -704,3 +704,22 @@ input {
     padding-top: 60px;
   }
 }
+@media (max-width: 768px) {
+  .page-wrap {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .main-content {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .sidebar-link {
+    border-radius: 16px;
+  }
+
+  .sidebar-bottom {
+    border-top: 1px solid #eef2f7;
+  }
+}

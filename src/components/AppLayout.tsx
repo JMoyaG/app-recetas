@@ -13,18 +13,22 @@ function AppLayout() {
   return (
     <div className="app-shell">
       {/* Sidebar */}
-      <div
-        style={{
-          position: isMobile ? "fixed" : "relative",
-          left: isMobile ? (sidebarOpen ? 0 : "-260px") : 0,
-          top: 0,
-          height: "100vh",
-          zIndex: 2000,
-          transition: "left 0.3s ease",
-        }}
-      >
-        <Sidebar />
-      </div>
+      {!isMobile && <Sidebar />}
+
+{isMobile && (
+  <div
+    style={{
+      position: "fixed",
+      top: 0,
+      left: sidebarOpen ? 0 : "-260px",
+      height: "100vh",
+      zIndex: 2000,
+      transition: "left 0.3s ease",
+    }}
+  >
+    <Sidebar />
+  </div>
+)}
 
       {/* Overlay */}
       {isMobile && sidebarOpen && (
