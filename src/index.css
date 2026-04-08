@@ -41,10 +41,10 @@ input {
 }
 
 .sidebar {
-  width: 260px;
-  background: #0b0f14; /* oscuro pro */
-  color: #e5e7eb;
-  border-right: none;
+  width: 250px;
+  background: #ffffff;
+  color: #111827;
+  border-right: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -101,9 +101,9 @@ input {
 }
 
 .sidebar-link.active {
-  background: #ef4444; /* rojo tipo intelec */
+  background: #0f9f6e;
   color: #fff;
-  font-weight: 700;
+  box-shadow: 0 10px 20px rgba(15, 159, 110, 0.25);
 }
 
 .sidebar-bottom {
@@ -674,46 +674,19 @@ input {
   will-change: transform, opacity;
 }
 @media (max-width: 768px) {
-  .sidebar {
-    width: 260px;
-  }
-
-  .main-content {
-    padding-top: 60px;
-  }
-}
-@media (max-width: 768px) {
-  .page-wrap {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-  }
-
-  .main-content {
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .sidebar-link {
-    border-radius: 16px;
-  }
-
-  .sidebar-bottom {
-    border-top: 1px solid #eef2f7;
-  }
-}
-@media (max-width: 768px) {
   .main-content {
     margin-left: 0 !important;
     padding: 82px 14px 16px !important;
     width: 100%;
-    max-width: 100%;
   }
 
-  .page-wrap {
-    min-height: auto;
+  .sidebar {
+    width: 260px;
   }
-
-  .sidebar-link {
-    border-radius: 14px;
-  }
+}
+.main-content {
+  flex: 1;
+  padding: 24px 28px;
+  background: #f3f5f7;
+  margin-left: 250px; /* 👈 ESTO FALTABA */
 }
