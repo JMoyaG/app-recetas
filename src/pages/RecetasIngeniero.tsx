@@ -1046,176 +1046,146 @@ export default function RecetasIngeniero() {
                 minHeight: 0,
               }}
             >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: isMobile
-                    ? "1fr"
-                    : "repeat(2, minmax(0,1fr))",
-                  gap: 16,
-                }}
-              >
-                <div>
-                  <label
-                    style={{
-                      display: "block",
-                      fontWeight: 700,
-                      marginBottom: 8,
-                    }}
-                  >
-                    Número de receta
-                  </label>
-                  <input
-                    value="Se genera automáticamente al guardar"
-                    disabled
-                    style={{
-                      width: "100%",
-                      padding: "12px 14px",
-                      borderRadius: 12,
-                      border: "1px solid #cbd5e1",
-                      background: "#f8fafc",
-                      color: "#64748b",
-                    }}
-                  />
-                </div>
+<div
+  style={{
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0,1fr))",
+    gap: 16,
+  }}
+>
+  <div>
+    <label
+      style={{
+        display: "block",
+        fontWeight: 700,
+        marginBottom: 8,
+      }}
+    >
+      Número de receta
+    </label>
+    <input
+      value="Se genera automáticamente al guardar"
+      disabled
+      style={{
+        width: "100%",
+        padding: "12px 14px",
+        borderRadius: 12,
+        border: "1px solid #cbd5e1",
+        background: "#f8fafc",
+        color: "#64748b",
+      }}
+    />
+  </div>
 
-                <div>
-                  <label
-                    style={{
-                      display: "block",
-                      fontWeight: 700,
-                      marginBottom: 8,
-                    }}
-                  >
-                    Ingeniero
-                  </label>
-                  {user?.rol === "Ingeniero" ? (
-                    <input
-                      type="text"
-                      value={
-                        ingenieroLabel(
-                          ingenieros.find(
-                            (ing) => Number(ing.id) === Number(form.ingenieroId)
-                          ) || null
-                        ) || String(user?.nombre || "")
-                      }
-                      disabled
-                      style={{
-                        width: "100%",
-                        padding: "12px 14px",
-                        borderRadius: 12,
-                        border: "1px solid #cbd5e1",
-                        background: "#f8fafc",
-                        color: "#475569",
-                        fontSize: 15,
-                      }}
-                    />
-                  ) : (
-                    <select
-                      value={form.ingenieroId}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          ingenieroId: Number(e.target.value),
-                        }))
-                      }
-                      style={{
-                        width: "100%",
-                        padding: "12px 14px",
-                        borderRadius: 12,
-                        border: "1px solid #cbd5e1",
-                        background: "#fff",
-                        color: "#0f172a",
-                        fontSize: 15,
-                      }}
-                    >
-                      <option value={0}>Seleccione...</option>
-                      {ingenieros.map((ing) => (
-                        <option key={ing.id} value={ing.id}>
-                          {ingenieroLabel(ing)}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+  <div>
+    <label
+      style={{
+        display: "block",
+        fontWeight: 700,
+        marginBottom: 8,
+      }}
+    >
+      Ingeniero
+    </label>
 
-                <div>
-                  <label
-                    style={{
-                      display: "block",
-                      fontWeight: 700,
-                      marginBottom: 8,
-                    }}
-                  >
-                    Cliente
-                  </label>
-                  <SearchableSelect
-                    options={clienteOptions}
-                    value={selectedClienteOption}
-                    onChange={(selected) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        clienteId: Number(selected?.value || 0),
-                        fincaId: 0,
-                        sucursalId: 0,
-                      }))
-                    }
-                    placeholder="Buscar cliente..."
-                    noOptionsMessage="No se encontraron clientes"
-                  />
-                </div>
+    <input
+      type="text"
+      value={
+        ingenieroLabel(
+          ingenieros.find((ing) => Number(ing.id) === Number(form.ingenieroId)) || null
+        ) || String(user?.nombre || "")
+      }
+      disabled
+      style={{
+        width: "100%",
+        padding: "12px 14px",
+        borderRadius: 12,
+        border: "1px solid #cbd5e1",
+        background: "#f8fafc",
+        color: "#475569",
+        fontSize: 15,
+      }}
+    />
+  </div>
 
-                <div>
-                  <label
-                    style={{
-                      display: "block",
-                      fontWeight: 700,
-                      marginBottom: 8,
-                    }}
-                  >
-                    Finca
-                  </label>
-                  <SearchableSelect
-                    options={fincaOptions}
-                    value={selectedFincaOption}
-                    onChange={(selected) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        fincaId: Number(selected?.value || 0),
-                      }))
-                    }
-                    placeholder={
-                      form.clienteId ? "Buscar finca..." : "Primero selecciona un cliente"
-                    }
-                    noOptionsMessage="No se encontraron fincas"
-                  />
-                </div>
+  <div>
+    <label
+      style={{
+        display: "block",
+        fontWeight: 700,
+        marginBottom: 8,
+      }}
+    >
+      Cliente
+    </label>
 
-                <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
-                  <label
-                    style={{
-                      display: "block",
-                      fontWeight: 700,
-                      marginBottom: 8,
-                    }}
-                  >
-                    Sucursal
-                  </label>
-                  <SearchableSelect
-                    options={sucursalOptions}
-                    value={selectedSucursalOption}
-                    onChange={(selected) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        sucursalId: Number(selected?.value || 0),
-                      }))
-                    }
-                    placeholder="Buscar sucursal..."
-                    noOptionsMessage="No se encontraron sucursales"
-                  />
-                </div>
-              </div>
+    <SearchableSelect
+      options={clienteOptions}
+      value={selectedClienteOption}
+      onChange={(selected) =>
+        setForm((prev) => ({
+          ...prev,
+          clienteId: Number(selected?.value || 0),
+          fincaId: 0,
+          sucursalId: 0,
+        }))
+      }
+      placeholder="Buscar cliente..."
+      noOptionsMessage="No se encontraron clientes"
+    />
+  </div>
 
+  <div>
+    <label
+      style={{
+        display: "block",
+        fontWeight: 700,
+        marginBottom: 8,
+      }}
+    >
+      Finca
+    </label>
+
+    <SearchableSelect
+      options={fincaOptions}
+      value={selectedFincaOption}
+      onChange={(selected) =>
+        setForm((prev) => ({
+          ...prev,
+          fincaId: Number(selected?.value || 0),
+        }))
+      }
+      placeholder={form.clienteId ? "Buscar finca..." : "Primero selecciona un cliente"}
+      disabled={!form.clienteId}
+      noOptionsMessage="No se encontraron fincas"
+    />
+  </div>
+
+  <div style={{ gridColumn: "1 / -1" }}>
+    <label
+      style={{
+        display: "block",
+        fontWeight: 700,
+        marginBottom: 8,
+      }}
+    >
+      Sucursal
+    </label>
+
+    <SearchableSelect
+      options={sucursalOptions}
+      value={selectedSucursalOption}
+      onChange={(selected) =>
+        setForm((prev) => ({
+          ...prev,
+          sucursalId: Number(selected?.value || 0),
+        }))
+      }
+      placeholder="Buscar sucursal..."
+      noOptionsMessage="No se encontraron sucursales"
+    />
+  </div>
+</div>
               <div
                 style={{
                   marginTop: 18,
