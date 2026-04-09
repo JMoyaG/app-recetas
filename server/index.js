@@ -2447,7 +2447,97 @@ app.get("/api/debug/sharepoint-columns/:listKey", authMiddleware, async (req, re
     res.status(500).json({ error: error.message || "No se pudieron leer columnas" });
   }
 });
+import multer from "multer";
+import csv from "csv-parser";
+import fs from "fs";
+import xlsx from "xlsx";
 
+const upload = multer({ dest: "uploads/" });
+
+/* ===========================
+   IMPORTAR PRODUCTOS
+=========================== */
+app.post("/api/productos/importar", authMiddleware, upload.single("archivo"), async (req, res) => {
+  try {
+    const file = req.file;
+    const tipo = req.body.tipo || "excel";
+
+    if (!file) {
+      return res.status(400).json({ error: "Archivo requerido" });
+    }
+
+    let rows = [];
+
+    if (tipo === "excel") {
+      const workbook = xlsx.readFile(file.path);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      rows = xlsx.utils.sheet_to_json(sheet);
+    } else {
+      rows = [];
+      await new Promise((resolve, reject) => {
+        fs.createReadStream(file.path)
+          .pipe(csv())
+          .on("data", (data) => rows.push(data))
+          .on("end", resolve)
+          .on("error", reject);
+      });
+    }
+
+    if (!rows.length) {
+      throw new Error("El archivo está vacío");
+    }
+
+    let creados = 0;
+
+    for (const row of rows) {
+      const nombre = row.nombre || row.Nombre;
+      const codigo = row.codigo || row.Codigo;
+      const unidad = row.unidad || row.Unidad || "Kg";
+
+      if (!nombre || !codigo) continue;
+
+      await createItem(LIST_NAMES.productos, {
+        Title: nombre,
+        Nombre: nombre,
+        Codigo: codigo,
+        Unidad: unidad,
+      });
+
+      creados++;
+    }
+
+    fs.unlinkSync(file.path);
+
+    res.json({
+      ok: true,
+      total: rows.length,
+      creados,
+    });
+  } catch (error) {
+    console.error("ERROR IMPORTAR PRODUCTOS:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ===========================
+   DESCARGAR LISTA BASE
+=========================== */
+app.get("/api/productos/base", authMiddleware, async (req, res) => {
+  try {
+    const csvData = `nombre,codigo,unidad
+Urea 46%,UR001,Kg
+Fertilizante 20-20-20,FE002,Kg
+Herbicida X,HB003,Ltr
+`;
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=productos_base.csv");
+
+    res.send(csvData);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Servidor backend corriendo en puerto ${PORT}`);
 });
