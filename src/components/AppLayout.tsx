@@ -32,14 +32,16 @@ function AppLayout() {
       {!isMobile && <Sidebar />}
 
       {isMobile && (
-        <>
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="mobile-menu-btn"
-            aria-label="Abrir menú"
-          >
-            <Menu size={22} />
-          </button>
+  <>
+    {!sidebarOpen && (
+      <button
+        onClick={() => setSidebarOpen(true)}
+        className="mobile-menu-btn"
+        aria-label="Abrir menú"
+      >
+        <Menu size={22} />
+      </button>
+    )}
 
           {sidebarOpen && (
             <div
