@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   Leaf,
+  X,
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -114,22 +115,56 @@ const Sidebar = ({ mobile = false, onNavigate }: SidebarProps) => {
       transition={{ duration: 0.28, ease: "easeOut" }}
     >
       <div className="sidebar-top">
-        <motion.div
-          className="brand"
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05, duration: 0.3 }}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 10,
+          }}
         >
-          <div className="brand-icon">
-            <Leaf size={18} />
-          </div>
-          <div>
-            <div className="brand-title">AgroRecetas</div>
-            <div className="brand-subtitle">Sistema de Gestión</div>
-          </div>
-        </motion.div>
+          <motion.div
+            className="brand"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05, duration: 0.3 }}
+            style={{ flex: 1, marginBottom: 0 }}
+          >
+            <div className="brand-icon">
+              <Leaf size={18} />
+            </div>
+            <div>
+              <div className="brand-title">AgroRecetas</div>
+              <div className="brand-subtitle">Sistema de Gestión</div>
+            </div>
+          </motion.div>
 
-        <nav className="sidebar-nav">
+          {mobile && (
+            <button
+              type="button"
+              onClick={() => onNavigate?.()}
+              aria-label="Cerrar menú"
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 12,
+                border: "1px solid #e2e8f0",
+                background: "#fff",
+                color: "#475467",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 2,
+                flexShrink: 0,
+              }}
+            >
+              <X size={18} />
+            </button>
+          )}
+        </div>
+
+        <nav className="sidebar-nav" style={{ marginTop: 14 }}>
           {visibleItems.map((item, index) => (
             <motion.div
               key={item.to}

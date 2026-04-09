@@ -15,7 +15,10 @@ function AppLayout() {
     function handleResize() {
       const mobile = window.innerWidth <= 768;
       setIsMobile(mobile);
-      if (!mobile) setSidebarOpen(false);
+
+      if (!mobile) {
+        setSidebarOpen(false);
+      }
     }
 
     handleResize();
@@ -24,24 +27,27 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    if (isMobile) setSidebarOpen(false);
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
   }, [location.pathname, isMobile]);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarOpen ? "sidebar-open" : ""}`}>
       {!isMobile && <Sidebar />}
 
       {isMobile && (
-  <>
-    {!sidebarOpen && (
-      <button
-        onClick={() => setSidebarOpen(true)}
-        className="mobile-menu-btn"
-        aria-label="Abrir menú"
-      >
-        <Menu size={22} />
-      </button>
-    )}
+        <>
+          {!sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="mobile-menu-btn"
+              aria-label="Abrir menú"
+              type="button"
+            >
+              <Menu size={22} />
+            </button>
+          )}
 
           {sidebarOpen && (
             <div
@@ -50,9 +56,7 @@ function AppLayout() {
             />
           )}
 
-          <div
-            className={`mobile-sidebar-drawer ${sidebarOpen ? "open" : ""}`}
-          >
+          <div className={`mobile-sidebar-drawer ${sidebarOpen ? "open" : ""}`}>
             <Sidebar mobile onNavigate={() => setSidebarOpen(false)} />
           </div>
         </>
