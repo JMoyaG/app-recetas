@@ -781,7 +781,7 @@ function mapProductoFromFields(item) {
         "Title",
       ]),
       ""
-    )
+    ) || ""
   ).trim();
 
   const codigo = String(
@@ -2502,18 +2502,42 @@ function detectHeaderMap(headerRow = []) {
   for (let i = 0; i < headerRow.length; i++) {
     const key = normalizeImportKey(headerRow[i]);
 
-    if (!map.codigo && ["codigo", "cod", "codigoproducto", "sku", "itemcode"].includes(key)) {
-      map.codigo = i;
-      continue;
-    }
-
-    if (!map.nombre && ["nombre", "producto", "nombreproducto", "descripcion", "descriplarga", "descripcionlarga", "itemname"].includes(key)) {
+    if (!map.nombre && [
+      "producto",
+      "nombre",
+      "nombreproducto",
+      "descripcion",
+      "descriplarga",
+      "descripcionlarga",
+      "itemname"
+    ].includes(key)) {
       map.nombre = i;
       continue;
     }
 
-    if (!map.unidad && ["unidad", "unidadmedida", "umedida", "um", "uom"].includes(key)) {
+    if (!map.unidad && [
+      "unidadfinal",
+      "unidad",
+      "unidadmedida",
+      "unidaddemedida",
+      "umedida",
+      "um",
+      "uom"
+    ].includes(key)) {
       map.unidad = i;
+      continue;
+    }
+
+    if (!map.codigo && [
+      "codigo",
+      "cod",
+      "codigoproducto",
+      "codigodeproducto",
+      "sku",
+      "itemcode"
+    ].includes(key)) {
+      map.codigo = i;
+      continue;
     }
   }
 
@@ -2522,7 +2546,12 @@ function detectHeaderMap(headerRow = []) {
 
 function rowLooksLikeHeader(row = []) {
   const map = detectHeaderMap(row);
-  return Number.isInteger(map.codigo) || Number.isInteger(map.nombre) || Number.isInteger(map.unidad);
+  return Number.isInteger(map.nombre) || Number.isInteger(map.unidad) || Number.isInteger(map.codigo);
+}
+
+function isLikelyProductCode(value = "") {
+  const v = String(value || "").trim();
+  return /^[A-Z]{1,4}\d{3,6}$/i.test(v) || /^[A-Z]{2}\d{4}$/i.test(v);
 }
 
 function inferProductoFromRow(row = [], headerMap = null) {
@@ -2533,28 +2562,34 @@ function inferProductoFromRow(row = [], headerMap = null) {
   let unidad = "";
 
   if (headerMap) {
-    codigo = normalizeImportCell(safe[headerMap.codigo]);
     nombre = normalizeImportCell(safe[headerMap.nombre]);
     unidad = normalizeImportCell(safe[headerMap.unidad]);
+    codigo = normalizeImportCell(safe[headerMap.codigo]);
   } else {
-    codigo = normalizeImportCell(safe[0]);
-    nombre = normalizeImportCell(safe[1]);
-    unidad = normalizeImportCell(safe[2]);
+    // Formato esperado del archivo productos.csv del usuario:
+    // Col 0 = Producto, Col 1 = UnidadFinal, Col 2 = Codigo, Col 3 = prefijo opcional
+    nombre = normalizeImportCell(safe[0]);
+    unidad = normalizeImportCell(safe[1]);
+    codigo = normalizeImportCell(safe[2]);
+
+    // Compatibilidad con archivos viejos: Código | Nombre | Unidad
+    if ((!codigo || !isLikelyProductCode(codigo)) && isLikelyProductCode(nombre)) {
+      const posibleCodigo = nombre;
+      const posibleNombre = normalizeImportCell(safe[1]);
+      const posibleUnidad = normalizeImportCell(safe[2]);
+
+      codigo = posibleCodigo;
+      nombre = posibleNombre;
+      unidad = posibleUnidad;
+    }
   }
 
-  const codigoLooksLikeCode = /^[A-Za-z]{1,6}\d{2,}$/i.test(codigo) || /^[A-Za-z0-9_-]{3,20}$/.test(codigo);
-  const nombreLooksLikeCode = /^[A-Za-z]{1,6}\d{2,}$/i.test(nombre) || /^[A-Za-z0-9_-]{3,20}$/.test(nombre);
-
-  if (!codigoLooksLikeCode && nombreLooksLikeCode && codigo && nombre) {
-    const temp = codigo;
-    codigo = nombre;
-    nombre = temp;
-  }
+  if (!unidad) unidad = "Kg";
 
   return {
-    codigo: codigo.trim(),
-    nombre: nombre.trim(),
-    unidad: (unidad || "Kg").trim() || "Kg",
+    codigo: String(codigo || "").trim(),
+    nombre: String(nombre || "").trim(),
+    unidad: String(unidad || "Kg").trim() || "Kg",
   };
 }
 

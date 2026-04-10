@@ -352,8 +352,10 @@ export default function Productos() {
             <div style={{ marginTop: 18, background: "#fafbf8", borderRadius: 14, padding: 16 }}>
               <div style={{ fontWeight: 800, marginBottom: 10 }}>Formato esperado:</div>
               <ul style={{ margin: 0, paddingLeft: 20, color: "#555", lineHeight: 1.7 }}>
-                <li>Primera columna: Código del producto (ej: FE0164)</li>
-                <li>Segunda columna: Nombre del producto</li>
+                <li>Primera columna: Nombre del producto</li>
+                <li>Segunda columna: Unidad final (ej: Kg)</li>
+                <li>Tercera columna: Código del producto (ej: FE0164)</li>
+                <li>Encabezados compatibles: Producto; UnidadFinal; Codigo</li>
                 <li>Separador: coma, punto y coma, o tabulación</li>
               </ul>
               {importing && <div style={{ marginTop: 12 }}>Importando...</div>}
