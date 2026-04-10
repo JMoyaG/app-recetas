@@ -778,11 +778,10 @@ function mapProductoFromFields(item) {
         "NombreProducto",
         "ProductoNombre",
         "Nombre_x0020_Producto",
-        "Nombre",
-        "Producto",
+        "Title",
       ]),
-      getFieldValue(f, ["Title"])
-    ) || ""
+      ""
+    )
   ).trim();
 
   const codigo = String(
@@ -1227,7 +1226,7 @@ async function getSucursalesData() {
 
 async function getProductosData() {
   const items = await listItems(LIST_NAMES.productos);
-  await ensureTitlesForItems(LIST_NAMES.productos, items, ["ProductoNombre", "NombreProducto", "Nombre Producto", "Nombre", "Producto"]);
+  await ensureTitlesForItems(LIST_NAMES.productos, items, ["ProductoNombre", "NombreProducto", "Nombre Producto", "Nombre_x0020_Producto", "Title"]);
   return items.map(mapProductoFromFields);
 }
 
