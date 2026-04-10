@@ -145,8 +145,21 @@ export default function Productos() {
       const formData = new FormData();
       formData.append("archivo", file);
       formData.append("tipo", importTab);
-      await importarProductosArchivo(formData);
-      alert("Productos importados correctamente");
+      const resp = await importarProductosArchivo(formData);
+      alert(
+        `Importación finalizada
+
+` +
+          `Total detectado: ${resp?.total ?? 0}
+` +
+          `Procesados: ${resp?.procesados ?? 0}
+` +
+          `Creados: ${resp?.creados ?? 0}
+` +
+          `Omitidos: ${resp?.omitidos ?? 0}
+` +
+          `Errores: ${Array.isArray(resp?.errores) ? resp.errores.length : 0}`
+      );
       setOpenImportModal(false);
       await loadProductos();
     } catch (err: any) {

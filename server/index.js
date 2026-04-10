@@ -5,10 +5,6 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { fileURLToPath } from "url";
 import path from "path";
-import fs from "fs";
-import multer from "multer";
-import csv from "csv-parser";
-import xlsx from "xlsx";
 
 dotenv.config();
 
@@ -26,8 +22,6 @@ app.use(
   })
 );
 app.use(express.json({ limit: "20mb" }));
-
-const upload = multer({ dest: "uploads/" });
 
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || "clave_super_secreta";
@@ -1872,178 +1866,12 @@ app.delete("/api/productos/:id", authMiddleware, async (req, res) => {
   }
 });
 
-
 app.get("/api/productos/lista-base", authMiddleware, async (_req, res) => {
-  try {
-    const csvData = `codigo,nombre,unidad
-FE0164,ABONO QUIMICO 12-27-8-2.5 (MgO)-4.3 (S) PAPERA INICIO YARA 45 KILOS,Kg
-FE0156,ABONO YARAMILA COMPLEX 12-11-18-3(Mg)-8(S)-+EM YARA 45 KILOS,Kg
-FU0733,ZORVEC ENCANTIA 33 SE 200ml,Ltr
-SE0149,CEBOLLA ALVARA 100.000 SEM,UND
-`;
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", 'attachment; filename="lista_base_productos.csv"');
-    res.send(csvData);
-  } catch (error) {
-    console.error("ERROR DESCARGAR BASE PRODUCTOS:", error);
-    res.status(500).json({ error: error.message || "No se pudo descargar la base" });
-  }
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="lista_base_productos.csv"');
+  res.send("nombre,codigo,unidad\n");
 });
 
-function normalizeUnidadProducto(value) {
-  const raw = String(value ?? "").trim().toLowerCase();
-  if (!raw) return "Kg";
-  if (["kg", "kgs", "kilogramo", "kilogramos"].includes(raw)) return "Kg";
-  if (["ltr", "lt", "l", "litro", "litros"].includes(raw)) return "Ltr";
-  if (["und", "unidad", "unidades", "uds", "ud"].includes(raw)) return "UND";
-  return String(value ?? "").trim() || "Kg";
-}
-
-function parseProductoImportRow(row = {}) {
-  const codigo = String(
-    firstDefined(
-      row.codigo,
-      row.Codigo,
-      row["Código"],
-      row.codigoProducto,
-      row.CodigoProducto,
-      row["CódigoProducto"],
-      row["Codigo Producto"],
-      row["Código Producto"]
-    ) || ""
-  ).trim();
-
-  const nombre = String(
-    firstDefined(
-      row.nombre,
-      row.Nombre,
-      row.producto,
-      row.Producto,
-      row.descripcion,
-      row.Descripcion,
-      row["Descripción"]
-    ) || ""
-  ).trim();
-
-  const unidad = normalizeUnidadProducto(
-    firstDefined(row.unidad, row.Unidad, row["Unidad"], row.unidadMedida, row.UnidadMedida, row["Unidad de Medida"])
-  );
-
-  return { codigo, nombre, unidad };
-}
-
-app.post("/api/productos/importar-archivo", authMiddleware, upload.single("archivo"), async (req, res) => {
-  let tempPath = "";
-
-  try {
-    const file = req.file;
-    const tipo = String(req.body?.tipo || "excel").trim().toLowerCase();
-
-    if (!file) {
-      return res.status(400).json({ error: "Debes seleccionar un archivo" });
-    }
-
-    tempPath = file.path;
-    const ext = path.extname(file.originalname || "").toLowerCase();
-    let rows = [];
-
-    if (tipo === "excel" || [".xlsx", ".xls", ".csv"].includes(ext)) {
-      if (ext === ".csv") {
-        rows = await new Promise((resolve, reject) => {
-          const result = [];
-          fs.createReadStream(tempPath)
-            .pipe(csv())
-            .on("data", (data) => result.push(data))
-            .on("end", () => resolve(result))
-            .on("error", reject);
-        });
-      } else {
-        const workbook = xlsx.readFile(tempPath);
-        const firstSheet = workbook.SheetNames[0];
-        if (!firstSheet) {
-          throw new Error("El archivo no contiene hojas");
-        }
-        rows = xlsx.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "" });
-      }
-    } else if (tipo === "texto" || ext === ".txt") {
-      const content = fs.readFileSync(tempPath, "utf8");
-      rows = content
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const parts = line.split(/[|,;\t]/).map((x) => String(x || "").trim());
-          return {
-            Codigo: parts[0] || "",
-            Nombre: parts[1] || "",
-            Unidad: parts[2] || "",
-          };
-        });
-    } else {
-      return res.status(400).json({ error: "Formato no soportado. Usa Excel, CSV o TXT." });
-    }
-
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return res.status(400).json({ error: "El archivo está vacío" });
-    }
-
-    const columns = await getListColumns(LIST_NAMES.productos, false);
-    const existentes = (await listItems(LIST_NAMES.productos)).map(mapProductoFromFields);
-    const existentesPorCodigo = new Map(
-      existentes
-        .filter((p) => !isEmpty(p.codigo))
-        .map((p) => [String(p.codigo).trim().toLowerCase(), p])
-    );
-
-    let creados = 0;
-    let actualizados = 0;
-    let omitidos = 0;
-
-    for (const row of rows) {
-      const { codigo, nombre, unidad } = parseProductoImportRow(row);
-
-      if (!codigo || !nombre) {
-        omitidos++;
-        continue;
-      }
-
-      const fields = buildProductoFields({ codigo, nombre, unidad }, columns);
-      const codigoKey = String(codigo).trim().toLowerCase();
-
-      if (existentesPorCodigo.has(codigoKey)) {
-        const existente = existentesPorCodigo.get(codigoKey);
-        await updateItem(LIST_NAMES.productos, Number(existente.id), fields);
-        actualizados++;
-      } else {
-        const created = await createItem(LIST_NAMES.productos, fields);
-        existentesPorCodigo.set(codigoKey, { id: Number(created.id), codigo, nombre, unidad });
-        creados++;
-      }
-    }
-
-    return res.json({
-      ok: true,
-      total: rows.length,
-      creados,
-      actualizados,
-      omitidos,
-      message: `Importación completada. Creados: ${creados}, actualizados: ${actualizados}, omitidos: ${omitidos}`,
-    });
-  } catch (error) {
-    console.error("ERROR IMPORTAR PRODUCTOS:", error);
-    return res.status(500).json({
-      error: error.message || "No se pudieron importar los productos",
-    });
-  } finally {
-    if (tempPath && fs.existsSync(tempPath)) {
-      try {
-        fs.unlinkSync(tempPath);
-      } catch {
-        // ignore
-      }
-    }
-  }
-});
 
 app.get("/api/usuarios", authMiddleware, async (_req, res) => {
   try {
@@ -2614,6 +2442,183 @@ app.get("/api/debug/sharepoint-columns/:listKey", authMiddleware, async (req, re
   } catch (error) {
     console.error("ERROR DEBUG COLUMNS:", error);
     res.status(500).json({ error: error.message || "No se pudieron leer columnas" });
+  }
+});
+import multer from "multer";
+import fs from "fs";
+import xlsx from "xlsx";
+
+const upload = multer({ dest: "uploads/" });
+
+function normalizeImportCell(value) {
+  return String(value ?? "").trim();
+}
+
+function normalizeImportKey(value) {
+  return normalizeImportCell(value)
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function detectHeaderMap(headerRow = []) {
+  const map = {};
+
+  for (let i = 0; i < headerRow.length; i++) {
+    const key = normalizeImportKey(headerRow[i]);
+
+    if (!map.codigo && ["codigo", "cod", "codigoproducto", "sku", "itemcode"].includes(key)) {
+      map.codigo = i;
+      continue;
+    }
+
+    if (!map.nombre && ["nombre", "producto", "nombreproducto", "descripcion", "descriplarga", "descripcionlarga", "itemname"].includes(key)) {
+      map.nombre = i;
+      continue;
+    }
+
+    if (!map.unidad && ["unidad", "unidadmedida", "umedida", "um", "uom"].includes(key)) {
+      map.unidad = i;
+    }
+  }
+
+  return map;
+}
+
+function rowLooksLikeHeader(row = []) {
+  const map = detectHeaderMap(row);
+  return Number.isInteger(map.codigo) || Number.isInteger(map.nombre) || Number.isInteger(map.unidad);
+}
+
+function inferProductoFromRow(row = [], headerMap = null) {
+  const safe = Array.isArray(row) ? row : [];
+
+  let codigo = "";
+  let nombre = "";
+  let unidad = "";
+
+  if (headerMap) {
+    codigo = normalizeImportCell(safe[headerMap.codigo]);
+    nombre = normalizeImportCell(safe[headerMap.nombre]);
+    unidad = normalizeImportCell(safe[headerMap.unidad]);
+  } else {
+    codigo = normalizeImportCell(safe[0]);
+    nombre = normalizeImportCell(safe[1]);
+    unidad = normalizeImportCell(safe[2]);
+  }
+
+  const codigoLooksLikeCode = /^[A-Za-z]{1,6}\d{2,}$/i.test(codigo) || /^[A-Za-z0-9_-]{3,20}$/.test(codigo);
+  const nombreLooksLikeCode = /^[A-Za-z]{1,6}\d{2,}$/i.test(nombre) || /^[A-Za-z0-9_-]{3,20}$/.test(nombre);
+
+  if (!codigoLooksLikeCode && nombreLooksLikeCode && codigo && nombre) {
+    const temp = codigo;
+    codigo = nombre;
+    nombre = temp;
+  }
+
+  return {
+    codigo: codigo.trim(),
+    nombre: nombre.trim(),
+    unidad: (unidad || "Kg").trim() || "Kg",
+  };
+}
+
+async function importarProductosDesdeArchivo(req, res) {
+  let filePath = "";
+
+  try {
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: "Archivo requerido" });
+    }
+
+    filePath = file.path;
+
+    const workbook = xlsx.readFile(file.path, { raw: false, cellDates: false });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const matrix = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: false });
+    const rows = (Array.isArray(matrix) ? matrix : [])
+      .map((row) => (Array.isArray(row) ? row : []))
+      .filter((row) => row.some((cell) => normalizeImportCell(cell) !== ""));
+
+    if (!rows.length) {
+      return res.status(400).json({ error: "El archivo está vacío" });
+    }
+
+    const headerMap = rowLooksLikeHeader(rows[0]) ? detectHeaderMap(rows[0]) : null;
+    const dataRows = headerMap ? rows.slice(1) : rows;
+    const columns = await getListColumns(LIST_NAMES.productos, false);
+
+    let procesados = 0;
+    let creados = 0;
+    let omitidos = 0;
+    const errores = [];
+
+    for (const row of dataRows) {
+      procesados++;
+      const producto = inferProductoFromRow(row, headerMap);
+
+      if (!producto.codigo || !producto.nombre) {
+        omitidos++;
+        continue;
+      }
+
+      try {
+        await createItem(LIST_NAMES.productos, buildProductoFields(producto, columns));
+        creados++;
+      } catch (error) {
+        errores.push({
+          fila: procesados + (headerMap ? 1 : 0),
+          codigo: producto.codigo,
+          nombre: producto.nombre,
+          error: error?.message || "Error desconocido",
+        });
+      }
+    }
+
+    return res.json({
+      ok: errores.length === 0,
+      total: dataRows.length,
+      procesados,
+      creados,
+      omitidos,
+      errores,
+      message: `Importación finalizada. Creados: ${creados}, omitidos: ${omitidos}, errores: ${errores.length}`,
+    });
+  } catch (error) {
+    console.error("ERROR IMPORTAR PRODUCTOS:", error);
+    return res.status(500).json({ error: error.message || "No se pudo importar el archivo" });
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch {}
+    }
+  }
+}
+/* ===========================
+   IMPORTAR PRODUCTOS
+=========================== */
+app.post("/api/productos/importar-archivo", authMiddleware, upload.single("archivo"), importarProductosDesdeArchivo);
+app.post("/api/productos/importar", authMiddleware, upload.single("archivo"), importarProductosDesdeArchivo);
+
+/* ===========================
+   DESCARGAR LISTA BASE
+=========================== */
+app.get("/api/productos/base", authMiddleware, async (req, res) => {
+  try {
+    const csvData = `nombre,codigo,unidad
+Urea 46%,UR001,Kg
+Fertilizante 20-20-20,FE002,Kg
+Herbicida X,HB003,Ltr
+`;
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=productos_base.csv");
+
+    res.send(csvData);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 app.listen(PORT, () => {
