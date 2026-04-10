@@ -5,6 +5,10 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { fileURLToPath } from "url";
 import path from "path";
+import fs from "fs";
+import multer from "multer";
+import csv from "csv-parser";
+import xlsx from "xlsx";
 
 dotenv.config();
 
@@ -22,7 +26,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: "20mb" }));
-
+const upload = multer({ dest: "uploads/" });
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || "clave_super_secreta";
 
@@ -770,13 +774,46 @@ function mapSucursalFromFields(item) {
 
 function mapProductoFromFields(item) {
   const f = item.fields || {};
+
+  const nombre = String(
+    getFieldValue(f, [
+      "Nombre Producto",
+      "NombreProducto",
+      "ProductoNombre",
+      "Nombre_x0020_Producto",
+      "Nombre",
+      "Producto",
+      "Title",
+    ]) || ""
+  ).trim();
+
+  const codigo = String(
+    getFieldValue(f, [
+      "Código Producto",
+      "Codigo Producto",
+      "CodigoProducto",
+      "C_x00f3_digoProducto",
+      "CódigoProducto",
+      "Codigo",
+      "Código",
+    ]) || ""
+  ).trim();
+
+  const unidad = String(
+    getFieldValue(f, [
+      "Unidad de Medida",
+      "UnidadDeMedida",
+      "UnidadMedida",
+      "Unidad_x0020_de_x0020_Medida",
+      "Unidad",
+    ]) || "Kg"
+  ).trim();
+
   return {
     id: Number(item.id),
-    nombre: getEntityDisplayName(f, ["ProductoNombre", "NombreProducto", "Nombre Producto", "Nombre", "Producto"]),
-    codigo: String(
-      getFieldValue(f, ["CodigoProducto", "CódigoProducto", "Codigo", "Código"])
-    ).trim(),
-    unidad: String(getFieldValue(f, ["Unidad", "UnidadMedida", "Unidad de Medida"]) || "Kg").trim(),
+    nombre,
+    codigo,
+    unidad,
   };
 }
 
@@ -1872,6 +1909,9 @@ app.get("/api/productos/lista-base", authMiddleware, async (_req, res) => {
   res.send("nombre,codigo,unidad\n");
 });
 
+app.post("/api/productos/importar-archivo", authMiddleware, async (_req, res) => {
+  res.json({ ok: true, message: "Importación no implementada en esta versión" });
+});
 
 app.get("/api/usuarios", authMiddleware, async (_req, res) => {
   try {
@@ -2445,162 +2485,75 @@ app.get("/api/debug/sharepoint-columns/:listKey", authMiddleware, async (req, re
   }
 });
 import multer from "multer";
+import csv from "csv-parser";
 import fs from "fs";
 import xlsx from "xlsx";
 
-const upload = multer({ dest: "uploads/" });
 
-function normalizeImportCell(value) {
-  return String(value ?? "").trim();
-}
-
-function normalizeImportKey(value) {
-  return normalizeImportCell(value)
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-}
-
-function detectHeaderMap(headerRow = []) {
-  const map = {};
-
-  for (let i = 0; i < headerRow.length; i++) {
-    const key = normalizeImportKey(headerRow[i]);
-
-    if (!map.codigo && ["codigo", "cod", "codigoproducto", "sku", "itemcode"].includes(key)) {
-      map.codigo = i;
-      continue;
-    }
-
-    if (!map.nombre && ["nombre", "producto", "nombreproducto", "descripcion", "descriplarga", "descripcionlarga", "itemname"].includes(key)) {
-      map.nombre = i;
-      continue;
-    }
-
-    if (!map.unidad && ["unidad", "unidadmedida", "umedida", "um", "uom"].includes(key)) {
-      map.unidad = i;
-    }
-  }
-
-  return map;
-}
-
-function rowLooksLikeHeader(row = []) {
-  const map = detectHeaderMap(row);
-  return Number.isInteger(map.codigo) || Number.isInteger(map.nombre) || Number.isInteger(map.unidad);
-}
-
-function inferProductoFromRow(row = [], headerMap = null) {
-  const safe = Array.isArray(row) ? row : [];
-
-  let codigo = "";
-  let nombre = "";
-  let unidad = "";
-
-  if (headerMap) {
-    codigo = normalizeImportCell(safe[headerMap.codigo]);
-    nombre = normalizeImportCell(safe[headerMap.nombre]);
-    unidad = normalizeImportCell(safe[headerMap.unidad]);
-  } else {
-    codigo = normalizeImportCell(safe[0]);
-    nombre = normalizeImportCell(safe[1]);
-    unidad = normalizeImportCell(safe[2]);
-  }
-
-  const codigoLooksLikeCode = /^[A-Za-z]{1,6}\d{2,}$/i.test(codigo) || /^[A-Za-z0-9_-]{3,20}$/.test(codigo);
-  const nombreLooksLikeCode = /^[A-Za-z]{1,6}\d{2,}$/i.test(nombre) || /^[A-Za-z0-9_-]{3,20}$/.test(nombre);
-
-  if (!codigoLooksLikeCode && nombreLooksLikeCode && codigo && nombre) {
-    const temp = codigo;
-    codigo = nombre;
-    nombre = temp;
-  }
-
-  return {
-    codigo: codigo.trim(),
-    nombre: nombre.trim(),
-    unidad: (unidad || "Kg").trim() || "Kg",
-  };
-}
-
-async function importarProductosDesdeArchivo(req, res) {
-  let filePath = "";
-
+/* ===========================
+   IMPORTAR PRODUCTOS
+=========================== */
+app.post("/api/productos/importar", authMiddleware, upload.single("archivo"), async (req, res) => {
   try {
     const file = req.file;
+    const tipo = req.body.tipo || "excel";
 
     if (!file) {
       return res.status(400).json({ error: "Archivo requerido" });
     }
 
-    filePath = file.path;
+    let rows = [];
 
-    const workbook = xlsx.readFile(file.path, { raw: false, cellDates: false });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const matrix = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: false });
-    const rows = (Array.isArray(matrix) ? matrix : [])
-      .map((row) => (Array.isArray(row) ? row : []))
-      .filter((row) => row.some((cell) => normalizeImportCell(cell) !== ""));
+    if (tipo === "excel") {
+      const workbook = xlsx.readFile(file.path);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      rows = xlsx.utils.sheet_to_json(sheet);
+    } else {
+      rows = [];
+      await new Promise((resolve, reject) => {
+        fs.createReadStream(file.path)
+          .pipe(csv())
+          .on("data", (data) => rows.push(data))
+          .on("end", resolve)
+          .on("error", reject);
+      });
+    }
 
     if (!rows.length) {
-      return res.status(400).json({ error: "El archivo está vacío" });
+      throw new Error("El archivo está vacío");
     }
 
-    const headerMap = rowLooksLikeHeader(rows[0]) ? detectHeaderMap(rows[0]) : null;
-    const dataRows = headerMap ? rows.slice(1) : rows;
-    const columns = await getListColumns(LIST_NAMES.productos, false);
-
-    let procesados = 0;
     let creados = 0;
-    let omitidos = 0;
-    const errores = [];
 
-    for (const row of dataRows) {
-      procesados++;
-      const producto = inferProductoFromRow(row, headerMap);
+    for (const row of rows) {
+      const nombre = row.nombre || row.Nombre;
+      const codigo = row.codigo || row.Codigo;
+      const unidad = row.unidad || row.Unidad || "Kg";
 
-      if (!producto.codigo || !producto.nombre) {
-        omitidos++;
-        continue;
-      }
+      if (!nombre || !codigo) continue;
 
-      try {
-        await createItem(LIST_NAMES.productos, buildProductoFields(producto, columns));
-        creados++;
-      } catch (error) {
-        errores.push({
-          fila: procesados + (headerMap ? 1 : 0),
-          codigo: producto.codigo,
-          nombre: producto.nombre,
-          error: error?.message || "Error desconocido",
-        });
-      }
+      await createItem(LIST_NAMES.productos, {
+        Title: nombre,
+        Nombre: nombre,
+        Codigo: codigo,
+        Unidad: unidad,
+      });
+
+      creados++;
     }
 
-    return res.json({
-      ok: errores.length === 0,
-      total: dataRows.length,
-      procesados,
+    fs.unlinkSync(file.path);
+
+    res.json({
+      ok: true,
+      total: rows.length,
       creados,
-      omitidos,
-      errores,
-      message: `Importación finalizada. Creados: ${creados}, omitidos: ${omitidos}, errores: ${errores.length}`,
     });
   } catch (error) {
     console.error("ERROR IMPORTAR PRODUCTOS:", error);
-    return res.status(500).json({ error: error.message || "No se pudo importar el archivo" });
-  } finally {
-    if (filePath && fs.existsSync(filePath)) {
-      try { fs.unlinkSync(filePath); } catch {}
-    }
+    res.status(500).json({ error: error.message });
   }
-}
-/* ===========================
-   IMPORTAR PRODUCTOS
-=========================== */
-app.post("/api/productos/importar-archivo", authMiddleware, upload.single("archivo"), importarProductosDesdeArchivo);
-app.post("/api/productos/importar", authMiddleware, upload.single("archivo"), importarProductosDesdeArchivo);
+});
 
 /* ===========================
    DESCARGAR LISTA BASE
