@@ -8,7 +8,7 @@ function Login() {
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
 
-  const [usuario, setUsuario] = useState("jmoya");
+  const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
