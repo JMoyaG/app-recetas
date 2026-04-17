@@ -16,12 +16,17 @@ import {
 } from "../Services/sharepoint";
 
 type RecetaProducto = {
-  productoId: number;
+  id?: number;
+  detalleId?: number;
+  productoId?: number;
   productoNombre: string;
   productoCodigo?: string;
   unidad?: string;
   cantidad: number;
   cantidadEntregada?: number;
+  dosis?: string;
+  esOtroProducto?: boolean;
+  otroProductoNombre?: string;
 };
 
 type Receta = {
@@ -38,7 +43,8 @@ type Receta = {
 };
 
 type ProductoConfirmacion = {
-  productoId: number;
+  detalleId: number;
+  productoId?: number;
   entregadoCompleto: boolean;
   cantidadEntregada: number;
 };
@@ -58,6 +64,157 @@ function formatFecha(fecha?: string) {
   return date.toLocaleString();
 }
 
+function buildPrintableRecipeHtml(
+  receta: Receta,
+  factura: string,
+  observacion: string,
+  productosConfirmacion: ProductoConfirmacion[]
+) {
+  const productos = Array.isArray(receta.productos) ? receta.productos : [];
+  const confirmacionMap = new Map(
+    productosConfirmacion.map((item) => [Number(item.detalleId), item])
+  );
+
+  const rows = productos
+    .map((producto, index) => {
+      const detalleId = Number(producto.detalleId || producto.id || index + 1);
+      const estado = confirmacionMap.get(detalleId);
+      const cantidadEntregada = Number(
+        estado?.cantidadEntregada ?? producto.cantidadEntregada ?? producto.cantidad ?? 0
+      );
+      const cantidadRecetada = Number(producto.cantidad || 0);
+      const codigo = String(producto.productoCodigo || "").trim();
+      const dosis = String(producto.dosis || "").trim();
+
+      return `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${String(producto.productoNombre || "Producto")}</td>
+          <td>${codigo || "-"}</td>
+          <td>${cantidadRecetada}</td>
+          <td>${String(producto.unidad || "-")}</td>
+          <td>${dosis || "-"}</td>
+          <td>${cantidadEntregada}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <!doctype html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <title>Receta ${String(receta.numero || "")}</title>
+        <style>
+          * { box-sizing: border-box; }
+          body {
+            font-family: Arial, Helvetica, sans-serif;
+            color: #111827;
+            margin: 0;
+            padding: 32px;
+          }
+          h1, h2, h3, p { margin: 0; }
+          .header { margin-bottom: 22px; }
+          .brand { font-size: 28px; font-weight: 800; color: #15803d; margin-bottom: 8px; }
+          .subtitle { font-size: 20px; font-weight: 700; margin-bottom: 18px; }
+          .meta {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px 18px;
+            margin-bottom: 24px;
+          }
+          .box {
+            border: 1px solid #dbe2ea;
+            border-radius: 12px;
+            padding: 14px;
+            background: #f8fafc;
+          }
+          .label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 14px;
+          }
+          th, td {
+            border: 1px solid #dbe2ea;
+            padding: 10px;
+            font-size: 13px;
+            vertical-align: top;
+          }
+          th {
+            background: #f1f5f9;
+            text-align: left;
+          }
+          .section-title {
+            font-size: 16px;
+            font-weight: 800;
+            margin: 18px 0 10px;
+          }
+          .observacion {
+            min-height: 72px;
+            white-space: pre-wrap;
+          }
+          @media print {
+            body { padding: 20px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="brand">AgroRecetas</div>
+          <div class="subtitle">Receta #${String(receta.numero || "-")}</div>
+        </div>
+
+        <div class="meta">
+          <div class="box"><span class="label">Cliente</span>${String(receta.clienteNombre || "-")}</div>
+          <div class="box"><span class="label">Finca</span>${String(receta.fincaNombre || "-")}</div>
+          <div class="box"><span class="label">Ingeniero</span>${String(receta.ingenieroNombre || "-")}</div>
+          <div class="box"><span class="label">Sucursal</span>${String(receta.sucursalNombre || "-")}</div>
+          <div class="box"><span class="label">Fecha de envío</span>${formatFecha(receta.fechaEnvio || receta.createdAt)}</div>
+          <div class="box"><span class="label">Factura</span>${String(factura || "-")}</div>
+        </div>
+
+        <div class="section-title">Productos</div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Producto</th>
+              <th>Código</th>
+              <th>Cantidad recetada</th>
+              <th>Unidad</th>
+              <th>Dosis</th>
+              <th>Cantidad entregada</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows || `<tr><td colspan="7">Sin productos</td></tr>`}
+          </tbody>
+        </table>
+
+        <div class="section-title">Observación</div>
+        <div class="box observacion">${String(observacion || "-")}</div>
+
+        <script>
+          window.onload = function() {
+            window.focus();
+            window.print();
+          };
+        </script>
+      </body>
+    </html>
+  `;
+}
+
 function RecetasSucursales() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -70,6 +227,7 @@ function RecetasSucursales() {
   const [recetaSeleccionada, setRecetaSeleccionada] = useState<Receta | null>(null);
   const [factura, setFactura] = useState("");
   const [observacion, setObservacion] = useState("");
+  const [imprimirReceta, setImprimirReceta] = useState(false);
   const [productosConfirmacion, setProductosConfirmacion] = useState<
     ProductoConfirmacion[]
   >([]);
@@ -118,36 +276,43 @@ function RecetasSucursales() {
     setRecetaSeleccionada(receta);
     setFactura("");
     setObservacion("");
+    setImprimirReceta(false);
     setProductosConfirmacion(
-      productos.map((p) => ({
-        productoId: Number(p.productoId),
-        entregadoCompleto: true,
-        cantidadEntregada: Number(p.cantidad || 0),
-      }))
+      productos.map((p, index) => {
+        const detalleId = Number(p.detalleId || p.id || index + 1);
+        return {
+          detalleId,
+          productoId: Number(p.productoId || 0) || undefined,
+          entregadoCompleto: true,
+          cantidadEntregada: Number(p.cantidad || 0),
+        };
+      })
     );
     setModalOpen(true);
   }
 
   function cerrarModal() {
+    if (saving) return;
     setModalOpen(false);
     setRecetaSeleccionada(null);
     setFactura("");
     setObservacion("");
+    setImprimirReceta(false);
     setProductosConfirmacion([]);
   }
 
-  function getEstadoProducto(productoId: number) {
-    return productosConfirmacion.find((p) => p.productoId === productoId);
+  function getEstadoProducto(detalleId: number) {
+    return productosConfirmacion.find((p) => p.detalleId === detalleId);
   }
 
   function toggleProductoCompleto(
-    productoId: number,
+    detalleId: number,
     entregadoCompleto: boolean,
     cantidadRecetada: number
   ) {
     setProductosConfirmacion((prev) =>
       prev.map((p) =>
-        p.productoId === productoId
+        p.detalleId === detalleId
           ? {
               ...p,
               entregadoCompleto,
@@ -160,10 +325,10 @@ function RecetasSucursales() {
     );
   }
 
-  function cambiarCantidadEntregada(productoId: number, cantidad: number) {
+  function cambiarCantidadEntregada(detalleId: number, cantidad: number) {
     setProductosConfirmacion((prev) =>
       prev.map((p) =>
-        p.productoId === productoId
+        p.detalleId === detalleId
           ? {
               ...p,
               cantidadEntregada: cantidad < 0 ? 0 : cantidad,
@@ -171,6 +336,27 @@ function RecetasSucursales() {
           : p
       )
     );
+  }
+
+  function imprimirRecetaComoPdf() {
+    if (!recetaSeleccionada) return;
+
+    const html = buildPrintableRecipeHtml(
+      recetaSeleccionada,
+      factura,
+      observacion,
+      productosConfirmacion
+    );
+
+    const popup = window.open("", "_blank", "width=980,height=760");
+    if (!popup) {
+      alert("No se pudo abrir la ventana de impresión. Revisá si el navegador la bloqueó.");
+      return;
+    }
+
+    popup.document.open();
+    popup.document.write(html);
+    popup.document.close();
   }
 
   async function finalizarConfirmacion() {
@@ -182,16 +368,29 @@ function RecetasSucursales() {
         return;
       }
 
+      const confirmacion = window.confirm(
+        imprimirReceta
+          ? "¿Desea finalizar la confirmación y abrir la receta para imprimirla o guardarla como PDF?"
+          : "¿Desea finalizar la confirmación?"
+      );
+
+      if (!confirmacion) return;
+
       setSaving(true);
 
       await confirmarEntregaReceta(recetaSeleccionada.id, {
         factura,
         observacion,
         detalles: productosConfirmacion.map((p) => ({
-          productoId: Number(p.productoId),
+          detalleId: Number(p.detalleId),
+          productoId: Number(p.productoId || 0) || undefined,
           cantidadEntregada: Number(p.cantidadEntregada || 0),
         })),
       });
+
+      if (imprimirReceta) {
+        imprimirRecetaComoPdf();
+      }
 
       cerrarModal();
       await loadRecetas();
@@ -485,7 +684,7 @@ function RecetasSucursales() {
                     ) : (
                       productos.map((p, index) => (
                         <div
-                          key={`${p.productoId}-${index}`}
+                          key={`${p.detalleId || p.id || p.productoId || "producto"}-${index}`}
                           style={{
                             display: "flex",
                             justifyContent: "space-between",
@@ -496,11 +695,18 @@ function RecetasSucursales() {
                             borderRadius: 12,
                           }}
                         >
-                          <span>
-                            {p.productoNombre || "Producto"}
-                            {p.productoCodigo ? ` (${p.productoCodigo})` : ""}
-                            {p.unidad ? ` - ${p.unidad}` : ""}
-                          </span>
+                          <div style={{ display: "grid", gap: 4 }}>
+                            <span>
+                              {p.productoNombre || "Producto"}
+                              {p.productoCodigo ? ` (${p.productoCodigo})` : ""}
+                              {p.unidad ? ` - ${p.unidad}` : ""}
+                            </span>
+                            {String(p.dosis || "").trim() && (
+                              <span style={{ color: "#475569", fontSize: 13 }}>
+                                <strong>Dosis:</strong> {p.dosis}
+                              </span>
+                            )}
+                          </div>
                           <strong>{p.cantidad}</strong>
                         </div>
                       ))
@@ -522,32 +728,40 @@ function RecetasSucursales() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 1000,
-            padding: 24,
+            padding: 20,
+            zIndex: 5000,
           }}
         >
           <div
             style={{
               width: "100%",
               maxWidth: 760,
-              maxHeight: "90vh",
+              maxHeight: "92vh",
               overflowY: "auto",
               background: "#fff",
-              borderRadius: 22,
-              boxShadow: "0 24px 80px rgba(15,23,42,0.18)",
+              borderRadius: 24,
+              boxShadow: "0 25px 60px rgba(15,23,42,0.22)",
             }}
           >
             <div
               style={{
-                padding: "22px 24px 14px",
+                padding: "18px 22px",
+                borderBottom: "1px solid #eef2f7",
                 display: "flex",
-                alignItems: "center",
                 justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                position: "sticky",
+                top: 0,
+                background: "#fff",
+                zIndex: 5,
               }}
             >
-              <h2 style={{ margin: 0, fontSize: 22, color: "#0f172a" }}>
-                Confirmar Entrega - Receta #{recetaSeleccionada.numero}
-              </h2>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#0f172a" }}>
+                  Confirmar Entrega - Receta #{recetaSeleccionada.numero}
+                </h2>
+              </div>
 
               <button
                 type="button"
@@ -555,7 +769,7 @@ function RecetasSucursales() {
                 style={{
                   width: 36,
                   height: 36,
-                  borderRadius: 10,
+                  borderRadius: 12,
                   border: "1px solid #d9e2ec",
                   background: "#fff",
                   cursor: "pointer",
@@ -568,17 +782,17 @@ function RecetasSucursales() {
               </button>
             </div>
 
-            <div style={{ padding: "0 24px 24px" }}>
+            <div style={{ padding: 22 }}>
               <div
                 style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(2, minmax(0,1fr))",
-                  gap: 16,
+                  gap: 14,
                   marginBottom: 24,
                   background: "#f8fafc",
                   border: "1px solid #e2e8f0",
                   borderRadius: 16,
-                  padding: 16,
+                  padding: 14,
                 }}
               >
                 <div>
@@ -589,7 +803,6 @@ function RecetasSucursales() {
                     <strong>Sucursal:</strong> {recetaSeleccionada.sucursalNombre || "-"}
                   </p>
                 </div>
-
                 <div>
                   <p style={{ margin: "0 0 10px" }}>
                     <strong>Cliente:</strong> {recetaSeleccionada.clienteNombre || "-"}
@@ -600,28 +813,29 @@ function RecetasSucursales() {
                 </div>
               </div>
 
-              <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>
-                Confirmar Productos Entregados
-              </h3>
+              <div style={{ marginBottom: 18 }}>
+                <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 800 }}>
+                  Confirmar Productos Entregados
+                </h3>
+                <p style={{ margin: 0, color: "#475569", lineHeight: 1.5 }}>
+                  Marque los productos que fueron efectivamente entregados. Si un producto no fue
+                  llevado completamente, desmarque y especifique la cantidad entregada.
+                </p>
+              </div>
 
-              <p style={{ margin: "0 0 18px", color: "#475569", lineHeight: 1.5 }}>
-                Marque los productos que fueron efectivamente entregados. Si un
-                producto no fue llevado completamente, desmarque y especifique la
-                cantidad entregada.
-              </p>
-
-              <div style={{ display: "grid", gap: 12, marginBottom: 22 }}>
+              <div style={{ display: "grid", gap: 12, marginBottom: 20 }}>
                 {(Array.isArray(recetaSeleccionada.productos)
                   ? recetaSeleccionada.productos
                   : []
                 ).map((p, index) => {
-                  const estado = getEstadoProducto(p.productoId);
-                  const entregadoCompleto = estado?.entregadoCompleto ?? true;
-                  const cantidadEntregada = estado?.cantidadEntregada ?? Number(p.cantidad || 0);
+                  const detalleId = Number(p.detalleId || p.id || index + 1);
+                  const estado = getEstadoProducto(detalleId);
+                  const entregadoCompleto = !!estado?.entregadoCompleto;
+                  const cantidadEntregada = Number(estado?.cantidadEntregada || 0);
 
                   return (
                     <div
-                      key={`${p.productoId}-${index}`}
+                      key={`${detalleId}-${index}`}
                       style={{
                         border: `1px solid ${entregadoCompleto ? "#bbf7d0" : "#fecaca"}`,
                         background: entregadoCompleto ? "#f0fdf4" : "#fff7f7",
@@ -637,48 +851,67 @@ function RecetasSucursales() {
                           alignItems: "flex-start",
                         }}
                       >
-                        <label
-                          style={{
-                            display: "flex",
-                            gap: 12,
-                            alignItems: "flex-start",
-                            flex: 1,
-                            cursor: "pointer",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={entregadoCompleto}
-                            onChange={(e) =>
-                              toggleProductoCompleto(
-                                p.productoId,
-                                e.target.checked,
-                                Number(p.cantidad || 0)
-                              )
-                            }
-                            style={{ marginTop: 4 }}
-                          />
-                          <div>
-                            <strong style={{ display: "block", marginBottom: 6 }}>
-                              {p.productoNombre}
-                            </strong>
-                            <span style={{ color: "#64748b", fontSize: 14 }}>
-                              Cantidad recetada: {p.cantidad}
+                        <div style={{ flex: 1 }}>
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              fontWeight: 800,
+                              color: "#0f172a",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={entregadoCompleto}
+                              onChange={(e) =>
+                                toggleProductoCompleto(
+                                  detalleId,
+                                  e.target.checked,
+                                  Number(p.cantidad || 0)
+                                )
+                              }
+                            />
+                            <span>
+                              {p.productoNombre || "Producto"}
+                              {p.productoCodigo ? ` (${p.productoCodigo})` : ""}
                             </span>
+                          </label>
+
+                          <div
+                            style={{
+                              marginTop: 10,
+                              display: "grid",
+                              gap: 4,
+                              color: "#475569",
+                              fontSize: 14,
+                            }}
+                          >
+                            <div>
+                              <strong>Cantidad recetada:</strong> {p.cantidad} {p.unidad || ""}
+                            </div>
+
+                            {String(p.dosis || "").trim() && (
+                              <div>
+                                <strong>Dosis:</strong> {p.dosis}
+                              </div>
+                            )}
                           </div>
-                        </label>
+                        </div>
 
                         <span
                           style={{
                             background: entregadoCompleto ? "#dcfce7" : "#fee2e2",
                             color: entregadoCompleto ? "#166534" : "#b91c1c",
                             borderRadius: 999,
-                            padding: "5px 10px",
+                            padding: "6px 12px",
                             fontSize: 12,
                             fontWeight: 700,
+                            whiteSpace: "nowrap",
                           }}
                         >
-                          {entregadoCompleto ? "Llevado" : "No llevado"}
+                          {entregadoCompleto ? "Llevado" : "Parcial"}
                         </span>
                       </div>
 
@@ -713,7 +946,7 @@ function RecetasSucursales() {
                               value={cantidadEntregada}
                               onChange={(e) =>
                                 cambiarCantidadEntregada(
-                                  p.productoId,
+                                  detalleId,
                                   Number(e.target.value)
                                 )
                               }
@@ -782,7 +1015,7 @@ function RecetasSucursales() {
 
               <div
                 style={{
-                  marginBottom: 22,
+                  marginBottom: 14,
                   border: "1px solid #fde68a",
                   background: "#fffbeb",
                   color: "#92400e",
@@ -802,6 +1035,39 @@ function RecetasSucursales() {
                     entregados. Asegúrese de verificar toda la información antes de continuar.
                   </span>
                 </div>
+              </div>
+
+              <div
+                style={{
+                  marginBottom: 22,
+                  border: "1px solid #dbe2ea",
+                  background: "#f8fafc",
+                  borderRadius: 14,
+                  padding: 16,
+                }}
+              >
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    cursor: "pointer",
+                    fontWeight: 700,
+                    color: "#0f172a",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={imprimirReceta}
+                    onChange={(e) => setImprimirReceta(e.target.checked)}
+                  />
+                  Imprimir / guardar receta en PDF al finalizar
+                </label>
+
+                <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: 14 }}>
+                  Si marca esta opción, al finalizar se abrirá la receta para imprimirla o
+                  guardarla como PDF.
+                </p>
               </div>
 
               <div

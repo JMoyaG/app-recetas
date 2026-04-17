@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapPin,
   Search,
@@ -6,6 +6,7 @@ import {
   Pencil,
   Trash2,
   X,
+  ChevronDown,
 } from "lucide-react";
 import {
   createFinca,
@@ -23,11 +24,195 @@ type FormFinca = {
   clienteId: string;
 };
 
+type ClienteOption = {
+  id: number;
+  label: string;
+};
+
 const initialForm: FormFinca = {
   nombre: "",
   ubicacion: "",
   clienteId: "",
 };
+
+function normalizeText(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function SearchableClienteSelect({
+  value,
+  options,
+  onChange,
+  disabled = false,
+}: {
+  value: string;
+  options: ClienteOption[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  const selectedOption =
+    options.find((option) => String(option.id) === String(value)) || null;
+
+  const filteredOptions = useMemo(() => {
+    const term = normalizeText(search);
+    if (!term) return options;
+
+    return options.filter((option) =>
+      normalizeText(option.label).includes(term)
+    );
+  }, [options, search]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setSearch("");
+    }
+  }, [open]);
+
+  return (
+    <div ref={wrapperRef} style={{ position: "relative" }}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) setOpen((prev) => !prev);
+        }}
+        style={{
+          width: "100%",
+          minHeight: 46,
+          padding: "12px 42px 12px 14px",
+          borderRadius: 12,
+          border: "1px solid #d9e2ec",
+          background: disabled ? "#f8fafc" : "#fff",
+          color: selectedOption ? "#0f172a" : "#94a3b8",
+          fontSize: 15,
+          textAlign: "left",
+          cursor: disabled ? "not-allowed" : "pointer",
+          position: "relative",
+        }}
+      >
+        {selectedOption?.label || "Buscar cliente..."}
+        <span
+          style={{
+            position: "absolute",
+            right: 12,
+            top: "50%",
+            transform: "translateY(-50%)",
+            color: "#64748b",
+            pointerEvents: "none",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <ChevronDown size={16} />
+        </span>
+      </button>
+
+      {open && !disabled && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            left: 0,
+            right: 0,
+            background: "#fff",
+            border: "1px solid #d9e2ec",
+            borderRadius: 14,
+            boxShadow: "0 18px 40px rgba(15, 23, 42, 0.16)",
+            zIndex: 5000,
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ padding: 12, borderBottom: "1px solid #eef2f7" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                border: "1px solid #d9e2ec",
+                borderRadius: 10,
+                padding: "0 10px",
+                background: "#fff",
+              }}
+            >
+              <Search size={15} color="#64748b" />
+              <input
+                autoFocus
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar cliente..."
+                style={{
+                  width: "100%",
+                  border: "none",
+                  outline: "none",
+                  minHeight: 40,
+                  fontSize: 14,
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ maxHeight: 240, overflowY: "auto" }}>
+            {filteredOptions.length === 0 ? (
+              <div style={{ padding: 14, color: "#64748b", fontSize: 14 }}>
+                No se encontraron clientes
+              </div>
+            ) : (
+              filteredOptions.map((option) => {
+                const selected = String(option.id) === String(value);
+
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(String(option.id));
+                      setOpen(false);
+                    }}
+                    style={{
+                      width: "100%",
+                      border: "none",
+                      borderBottom: "1px solid #f1f5f9",
+                      background: selected ? "#f0fdf4" : "#fff",
+                      color: "#0f172a",
+                      padding: "12px 14px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      fontSize: 14,
+                      fontWeight: selected ? 700 : 500,
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Fincas() {
   const [fincas, setFincas] = useState<FincaSP[]>([]);
@@ -76,16 +261,28 @@ function Fincas() {
     const textRef = String(clienteRef || "").trim();
     if (textRef) {
       const normalized = textRef.toLowerCase().replace(/^cliente id\s*/i, "").trim();
-      const cliente = clientes.find((c) =>
-        `${c.nombre} ${c.apellido || ""}`.trim().toLowerCase() === normalized ||
-        String(c.nombre || "").trim().toLowerCase() === normalized
-      );
+      const cliente = clientes.find((c) => {
+        const fullName = `${c.nombre} ${c.apellido || ""}`.trim().toLowerCase();
+        const byName = String(c.nombre || "").trim().toLowerCase();
+        return fullName === normalized || byName === normalized;
+      });
       if (cliente) return `${cliente.nombre} ${cliente.apellido || ""}`.trim();
       return textRef;
     }
 
     return "Sin cliente";
   }
+
+  const clienteOptions = useMemo<ClienteOption[]>(
+    () =>
+      clientes.map((cliente) => ({
+        id: Number(cliente.id),
+        label: `${cliente.nombre} ${cliente.apellido || ""}${
+          cliente.telefono ? ` ${cliente.telefono}` : ""
+        }`.trim(),
+      })),
+    [clientes]
+  );
 
   function openCrear() {
     setModo("crear");
@@ -95,15 +292,15 @@ function Fincas() {
   }
 
   function openEditar(finca: FincaSP) {
-  setModo("editar");
-  setFincaEditando(finca);
-  setForm({
-    nombre: finca.nombre || "",
-    ubicacion: finca.ubicacion || "",
-    clienteId: String(finca.clienteId || ""),
-  });
-  setOpenModal(true);
-}
+    setModo("editar");
+    setFincaEditando(finca);
+    setForm({
+      nombre: finca.nombre || "",
+      ubicacion: finca.ubicacion || "",
+      clienteId: String(finca.clienteId || ""),
+    });
+    setOpenModal(true);
+  }
 
   function closeModal() {
     if (saving) return;
@@ -121,8 +318,8 @@ function Fincas() {
       }
 
       const payload = {
-        nombre: form.nombre,
-        ubicacion: form.ubicacion,
+        nombre: form.nombre.trim(),
+        ubicacion: form.ubicacion.trim(),
         clienteId: Number(form.clienteId),
       };
 
@@ -296,19 +493,14 @@ function Fincas() {
 
               <div className="form-group">
                 <label>Cliente</label>
-                <select
+                <SearchableClienteSelect
                   value={form.clienteId}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, clienteId: e.target.value }))
+                  options={clienteOptions}
+                  disabled={saving}
+                  onChange={(clienteId) =>
+                    setForm((prev) => ({ ...prev, clienteId }))
                   }
-                >
-                  <option value="">Seleccione un cliente</option>
-                  {clientes.map((cliente) => (
-                    <option key={cliente.id} value={cliente.id}>
-                      {`${cliente.nombre} ${cliente.apellido}`.trim()}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
 
