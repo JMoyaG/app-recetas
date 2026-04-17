@@ -10,12 +10,12 @@ import {
   ClipboardList,
   Settings,
   LogOut,
-  Leaf,
   X,
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
+import logoSurco from "../assets/logo-surco.png";
 import type { UserRole } from "../context/AuthContext";
 
 type MenuItem = {
@@ -130,11 +130,28 @@ const Sidebar = ({ mobile = false, onNavigate }: SidebarProps) => {
             transition={{ delay: 0.05, duration: 0.3 }}
             style={{ flex: 1, marginBottom: 0 }}
           >
-            <div className="brand-icon">
-              <Leaf size={18} />
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 12,
+                background: "#ffffff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 6px 18px rgba(15, 23, 42, 0.08)",
+                overflow: "hidden",
+                flexShrink: 0,
+              }}
+            >
+              <img
+                src={logoSurco}
+                alt="SURCO"
+                style={{ width: "100%", height: "100%", objectFit: "contain" }}
+              />
             </div>
             <div>
-              <div className="brand-title">AgroRecetas</div>
+              <div className="brand-title">SURCO</div>
               <div className="brand-subtitle">Sistema de Gestión</div>
             </div>
           </motion.div>

@@ -119,7 +119,7 @@ function Dashboard() {
           <Leaf size={20} />
         </div>
         <div>
-          <div className="page-title">Sistema AgroRecetas</div>
+          <div className="page-title">Sistema SURCO</div>
           <div className="page-subtitle">
             Gestión integral de recetas y productos agrícolas
           </div>

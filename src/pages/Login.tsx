@@ -1,8 +1,9 @@
-import { Leaf, Lock, Eye, EyeOff, LogIn, User } from "lucide-react";
+import { Lock, Eye, EyeOff, LogIn, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import logoSurco from "../assets/logo-surco.png";
 
 function Login() {
   const navigate = useNavigate();
@@ -44,13 +45,22 @@ function Login() {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="login-logo-wrap">
-          <div className="login-logo">
-            <Leaf size={24} strokeWidth={2.3} />
-          </div>
+        <div className="login-logo-wrap" style={{ marginBottom: 18 }}>
+          <img
+            src={logoSurco}
+            alt="SURCO"
+            style={{
+              width: "100%",
+              maxWidth: 240,
+              height: "auto",
+              objectFit: "contain",
+              display: "block",
+              margin: "0 auto",
+            }}
+          />
         </div>
 
-        <h1 className="login-title">AgroRecetas</h1>
+        <h1 className="login-title">SURCO</h1>
         <p className="login-subtitle">Sistema de Gestión Agrícola</p>
 
         <form onSubmit={handleSubmit}>

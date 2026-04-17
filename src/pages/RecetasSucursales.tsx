@@ -226,7 +226,7 @@ function RecetasSucursales() {
           <title>Receta ${escapeHtml(receta.numero)}</title>
         </head>
         <body style="font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111827;">
-          <h1 style="margin:0 0 6px;">AgroRecetas</h1>
+          <h1 style="margin:0 0 6px;">SURCO</h1>
           <h2 style="margin:0 0 18px;">Receta #${escapeHtml(receta.numero)}</h2>
 
           <div style="margin-bottom:18px;line-height:1.7;">
