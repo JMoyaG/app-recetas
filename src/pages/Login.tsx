@@ -45,7 +45,10 @@ function Login() {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="login-logo-wrap" style={{ marginBottom: 18 }}>
+        <div
+          className="login-logo-wrap"
+          style={{ flexDirection: "column", alignItems: "center", marginBottom: 22 }}
+        >
           <img
             src={logoSurco}
             alt="SURCO"
@@ -53,15 +56,19 @@ function Login() {
               width: "100%",
               maxWidth: 240,
               height: "auto",
-              objectFit: "contain",
               display: "block",
-              margin: "0 auto",
+              objectFit: "contain",
+              marginBottom: 14,
             }}
           />
-        </div>
 
-        <h1 className="login-title">SURCO</h1>
-        <p className="login-subtitle">Sistema de Gestión Agrícola</p>
+          <h1 className="login-title" style={{ marginBottom: 6 }}>
+            AppRecetas
+          </h1>
+          <p className="login-subtitle" style={{ marginBottom: 0 }}>
+            Sistema de Gestión Agrícola
+          </p>
+        </div>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
