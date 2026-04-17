@@ -15,8 +15,8 @@ import {
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
-import logoSurco from "../assets/logo-surco.png";
 import type { UserRole } from "../context/AuthContext";
+import logoSurco from "../assets/logo-surco.png";
 
 type MenuItem = {
   to: string;
@@ -128,7 +128,13 @@ const Sidebar = ({ mobile = false, onNavigate }: SidebarProps) => {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05, duration: 0.3 }}
-            style={{ flex: 1, marginBottom: 0 }}
+            style={{
+              flex: 1,
+              marginBottom: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
           >
             <div
               style={{
@@ -139,7 +145,7 @@ const Sidebar = ({ mobile = false, onNavigate }: SidebarProps) => {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 6px 18px rgba(15, 23, 42, 0.08)",
+                boxShadow: "0 6px 18px rgba(15,23,42,0.08)",
                 overflow: "hidden",
                 flexShrink: 0,
               }}
@@ -150,7 +156,8 @@ const Sidebar = ({ mobile = false, onNavigate }: SidebarProps) => {
                 style={{ width: "100%", height: "100%", objectFit: "contain" }}
               />
             </div>
-            <div>
+
+            <div style={{ minWidth: 0 }}>
               <div className="brand-title">SURCO</div>
               <div className="brand-subtitle">Sistema de Gestión</div>
             </div>

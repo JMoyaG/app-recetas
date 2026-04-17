@@ -14,6 +14,7 @@ import {
   confirmarEntregaReceta,
   getRecetasPendientesSucursal,
 } from "../Services/sharepoint";
+import logoSurco from "../assets/logo-surco.png";
 
 type RecetaProducto = {
   detalleId?: number;
@@ -82,7 +83,7 @@ function RecetasSucursales() {
   const [recetaSeleccionada, setRecetaSeleccionada] = useState<Receta | null>(null);
   const [factura, setFactura] = useState("");
   const [observacion, setObservacion] = useState("");
-  const [imprimirReceta, setImprimirReceta] = useState(false);
+  const [imprimirReceta, setImprimirReceta] = useState(true);
   const [productosConfirmacion, setProductosConfirmacion] = useState<
     ProductoConfirmacion[]
   >([]);
@@ -131,10 +132,10 @@ function RecetasSucursales() {
     setRecetaSeleccionada(receta);
     setFactura("");
     setObservacion("");
-    setImprimirReceta(false);
+    setImprimirReceta(true);
     setProductosConfirmacion(
       productos.map((p) => ({
-        detalleId: Number(p.detalleId || 0) || undefined,
+        detalleId: p.detalleId,
         productoId: Number(p.productoId),
         entregadoCompleto: true,
         cantidadEntregada: Number(p.cantidad || 0),
@@ -148,55 +149,57 @@ function RecetasSucursales() {
     setRecetaSeleccionada(null);
     setFactura("");
     setObservacion("");
-    setImprimirReceta(false);
+    setImprimirReceta(true);
     setProductosConfirmacion([]);
   }
 
-  function getEstadoProducto(detalleId?: number, productoId?: number) {
+  function getEstadoProducto(productoId: number, detalleId?: number) {
     return productosConfirmacion.find(
       (p) =>
-        (detalleId && p.detalleId === detalleId) ||
-        (!detalleId && Number(p.productoId) === Number(productoId))
+        (detalleId && p.detalleId ? Number(p.detalleId) === Number(detalleId) : false) ||
+        Number(p.productoId) === Number(productoId)
     );
   }
 
   function toggleProductoCompleto(
-    detalleId: number | undefined,
     productoId: number,
     entregadoCompleto: boolean,
-    cantidadRecetada: number
+    cantidadRecetada: number,
+    detalleId?: number
   ) {
     setProductosConfirmacion((prev) =>
-      prev.map((p) =>
-        ((detalleId && p.detalleId === detalleId) ||
-          (!detalleId && p.productoId === productoId))
-          ? {
-              ...p,
-              entregadoCompleto,
-              cantidadEntregada: entregadoCompleto
-                ? Number(cantidadRecetada)
-                : Number(p.cantidadEntregada ?? 0),
-            }
-          : p
-      )
+      prev.map((p) => {
+        const same =
+          (detalleId && p.detalleId ? Number(p.detalleId) === Number(detalleId) : false) ||
+          Number(p.productoId) === Number(productoId);
+
+        if (!same) return p;
+
+        return {
+          ...p,
+          entregadoCompleto,
+          cantidadEntregada: entregadoCompleto
+            ? Number(cantidadRecetada)
+            : Number(p.cantidadEntregada ?? 0),
+        };
+      })
     );
   }
 
-  function cambiarCantidadEntregada(
-    detalleId: number | undefined,
-    productoId: number,
-    cantidad: number
-  ) {
+  function cambiarCantidadEntregada(productoId: number, cantidad: number, detalleId?: number) {
     setProductosConfirmacion((prev) =>
-      prev.map((p) =>
-        ((detalleId && p.detalleId === detalleId) ||
-          (!detalleId && p.productoId === productoId))
-          ? {
-              ...p,
-              cantidadEntregada: cantidad < 0 ? 0 : cantidad,
-            }
-          : p
-      )
+      prev.map((p) => {
+        const same =
+          (detalleId && p.detalleId ? Number(p.detalleId) === Number(detalleId) : false) ||
+          Number(p.productoId) === Number(productoId);
+
+        if (!same) return p;
+
+        return {
+          ...p,
+          cantidadEntregada: cantidad < 0 ? 0 : cantidad,
+        };
+      })
     );
   }
 
@@ -207,58 +210,258 @@ function RecetasSucursales() {
       .map(
         (p, index) => `
           <tr>
-            <td style="border:1px solid #d1d5db;padding:8px;">${index + 1}</td>
-            <td style="border:1px solid #d1d5db;padding:8px;">${escapeHtml(p.productoNombre || "")}</td>
-            <td style="border:1px solid #d1d5db;padding:8px;">${escapeHtml(p.productoCodigo || "")}</td>
-            <td style="border:1px solid #d1d5db;padding:8px;">${escapeHtml(p.unidad || "")}</td>
-            <td style="border:1px solid #d1d5db;padding:8px;">${escapeHtml(p.cantidad || 0)}</td>
-            <td style="border:1px solid #d1d5db;padding:8px;">${escapeHtml(p.dosis || "-")}</td>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(p.productoNombre || "-")}</td>
+            <td>${escapeHtml(p.productoCodigo || "-")}</td>
+            <td>${escapeHtml(p.unidad || "-")}</td>
+            <td>${escapeHtml(p.cantidad || 0)}</td>
+            <td>${escapeHtml(p.dosis || "-")}</td>
           </tr>
         `
       )
       .join("");
 
     const html = `
-      <!doctype html>
+      <!DOCTYPE html>
       <html>
         <head>
-          <meta charset="utf-8" />
+          <meta charset="UTF-8" />
           <title>Receta ${escapeHtml(receta.numero)}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              font-family: Arial, Helvetica, sans-serif;
+              color: #0f172a;
+              background: #f8fafc;
+            }
+            .page {
+              width: 100%;
+              max-width: 900px;
+              margin: 28px auto;
+              background: #ffffff;
+              border-radius: 18px;
+              overflow: hidden;
+              box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+              border: 1px solid #e2e8f0;
+            }
+            .topbar {
+              height: 10px;
+              background: linear-gradient(90deg, #0ea5e9, #22c55e, #eab308, #f97316);
+            }
+            .header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 16px;
+              padding: 24px 28px 18px;
+              border-bottom: 1px solid #e2e8f0;
+            }
+            .brand {
+              display: flex;
+              align-items: center;
+              gap: 16px;
+            }
+            .brand img {
+              width: 180px;
+              max-width: 100%;
+              height: auto;
+              display: block;
+            }
+            .meta {
+              text-align: right;
+              font-size: 12px;
+              color: #64748b;
+            }
+            .content {
+              padding: 28px;
+            }
+            .title {
+              margin: 0 0 6px;
+              font-size: 28px;
+              font-weight: 800;
+              color: #14532d;
+            }
+            .subtitle {
+              margin: 0 0 22px;
+              font-size: 14px;
+              color: #64748b;
+            }
+            .grid {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 14px;
+              margin-bottom: 24px;
+            }
+            .card {
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 14px;
+              padding: 16px;
+            }
+            .label {
+              display: block;
+              font-size: 12px;
+              font-weight: 700;
+              color: #64748b;
+              margin-bottom: 4px;
+              text-transform: uppercase;
+              letter-spacing: 0.04em;
+            }
+            .value {
+              font-size: 15px;
+              font-weight: 700;
+              color: #0f172a;
+              word-break: break-word;
+            }
+            .obs-box {
+              margin-bottom: 22px;
+              background: #f0fdf4;
+              border: 1px solid #bbf7d0;
+              border-radius: 14px;
+              padding: 16px;
+            }
+            .obs-title {
+              margin: 0 0 8px;
+              font-size: 14px;
+              font-weight: 800;
+              color: #166534;
+            }
+            .obs-text {
+              margin: 0;
+              font-size: 14px;
+              color: #0f172a;
+              line-height: 1.6;
+              white-space: pre-wrap;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              overflow: hidden;
+              border-radius: 14px;
+              border: 1px solid #e2e8f0;
+            }
+            thead th {
+              background: #166534;
+              color: #ffffff;
+              text-align: left;
+              padding: 12px 14px;
+              font-size: 13px;
+            }
+            tbody td {
+              padding: 12px 14px;
+              border-top: 1px solid #e2e8f0;
+              font-size: 14px;
+            }
+            tbody tr:nth-child(even) {
+              background: #f8fafc;
+            }
+            .footer {
+              padding: 18px 28px 24px;
+              color: #64748b;
+              font-size: 12px;
+            }
+            @media print {
+              body {
+                background: #fff;
+              }
+              .page {
+                box-shadow: none;
+                border: none;
+                margin: 0;
+                max-width: 100%;
+                border-radius: 0;
+              }
+            }
+          </style>
         </head>
-        <body style="font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111827;">
-          <h1 style="margin:0 0 6px;">SURCO</h1>
-          <h2 style="margin:0 0 18px;">Receta #${escapeHtml(receta.numero)}</h2>
+        <body>
+          <div class="page">
+            <div class="topbar"></div>
+            <div class="header">
+              <div class="brand">
+                <img src="${logoSurco}" alt="SURCO" />
+              </div>
+              <div class="meta">
+                <div><strong>Receta:</strong> ${escapeHtml(receta.numero)}</div>
+                <div><strong>Fecha:</strong> ${escapeHtml(new Date().toLocaleString())}</div>
+              </div>
+            </div>
 
-          <div style="margin-bottom:18px;line-height:1.7;">
-            <div><strong>Ingeniero:</strong> ${escapeHtml(receta.ingenieroNombre || "-")}</div>
-            <div><strong>Cliente:</strong> ${escapeHtml(receta.clienteNombre || "-")}</div>
-            <div><strong>Finca:</strong> ${escapeHtml(receta.fincaNombre || "-")}</div>
-            <div><strong>Sucursal:</strong> ${escapeHtml(receta.sucursalNombre || "-")}</div>
-            <div><strong>Factura:</strong> ${escapeHtml(facturaNumero || "-")}</div>
-            <div><strong>Observación:</strong> ${escapeHtml(observacionTexto || "-")}</div>
+            <div class="content">
+              <h1 class="title">Receta #${escapeHtml(receta.numero)}</h1>
+              <p class="subtitle">Comprobante de entrega generado desde el sistema SURCO.</p>
+
+              <div class="grid">
+                <div class="card">
+                  <span class="label">Cliente</span>
+                  <div class="value">${escapeHtml(receta.clienteNombre || "-")}</div>
+                </div>
+                <div class="card">
+                  <span class="label">Finca</span>
+                  <div class="value">${escapeHtml(receta.fincaNombre || "-")}</div>
+                </div>
+                <div class="card">
+                  <span class="label">Ingeniero</span>
+                  <div class="value">${escapeHtml(receta.ingenieroNombre || "-")}</div>
+                </div>
+                <div class="card">
+                  <span class="label">Sucursal</span>
+                  <div class="value">${escapeHtml(receta.sucursalNombre || "-")}</div>
+                </div>
+                <div class="card">
+                  <span class="label">Factura</span>
+                  <div class="value">${escapeHtml(facturaNumero || "-")}</div>
+                </div>
+                <div class="card">
+                  <span class="label">Estado</span>
+                  <div class="value">Entrega confirmada</div>
+                </div>
+              </div>
+
+              <div class="obs-box">
+                <h3 class="obs-title">Observación</h3>
+                <p class="obs-text">${escapeHtml(observacionTexto || "-")}</p>
+              </div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Producto</th>
+                    <th>Código</th>
+                    <th>Unidad</th>
+                    <th>Cantidad</th>
+                    <th>Dosis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${productosHtml}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="footer">
+              Documento generado automáticamente por SURCO.
+            </div>
           </div>
-
-          <table style="width:100%;border-collapse:collapse;font-size:14px;">
-            <thead>
-              <tr>
-                <th style="border:1px solid #d1d5db;padding:8px;background:#f8fafc;">#</th>
-                <th style="border:1px solid #d1d5db;padding:8px;background:#f8fafc;">Producto</th>
-                <th style="border:1px solid #d1d5db;padding:8px;background:#f8fafc;">Código</th>
-                <th style="border:1px solid #d1d5db;padding:8px;background:#f8fafc;">Unidad</th>
-                <th style="border:1px solid #d1d5db;padding:8px;background:#f8fafc;">Cantidad</th>
-                <th style="border:1px solid #d1d5db;padding:8px;background:#f8fafc;">Dosis</th>
-              </tr>
-            </thead>
-            <tbody>${productosHtml}</tbody>
-          </table>
-
-          <script>window.onload = function(){ window.print(); };</script>
+          <script>
+            window.onload = function () {
+              setTimeout(function () {
+                window.print();
+              }, 250);
+            };
+          </script>
         </body>
       </html>
     `;
 
-    const ventana = window.open("", "_blank", "width=900,height=700");
-    if (!ventana) return;
+    const ventana = window.open("", "_blank", "width=1024,height=768");
+    if (!ventana) {
+      alert("No se pudo abrir la ventana de impresión. Verifique si el navegador está bloqueando ventanas emergentes.");
+      return;
+    }
+
     ventana.document.open();
     ventana.document.write(html);
     ventana.document.close();
@@ -273,13 +476,13 @@ function RecetasSucursales() {
         return;
       }
 
-      const confirmado = window.confirm(
+      const ok = window.confirm(
         imprimirReceta
-          ? "¿Desea finalizar la confirmación y abrir la receta para imprimirla o guardarla como PDF?"
+          ? "¿Desea finalizar la confirmación e imprimir/guardar la receta en PDF?"
           : "¿Desea finalizar la confirmación?"
       );
 
-      if (!confirmado) return;
+      if (!ok) return;
 
       setSaving(true);
 
@@ -287,8 +490,8 @@ function RecetasSucursales() {
         factura,
         observacion,
         detalles: productosConfirmacion.map((p) => ({
-          detalleId: Number(p.detalleId || 0) || undefined,
-          productoId: Number(p.productoId),
+          detalleId: p.detalleId,
+          productoId: Number(p.productoId || 0),
           cantidadEntregada: Number(p.cantidadEntregada || 0),
         })),
       });
@@ -598,17 +801,18 @@ function RecetasSucursales() {
                             background: "#fff",
                             border: "1px solid #e5edf5",
                             borderRadius: 12,
+                            alignItems: "center",
                           }}
                         >
                           <div>
-                            <div>
+                            <div style={{ fontWeight: 700, color: "#0f172a" }}>
                               {p.productoNombre || "Producto"}
                               {p.productoCodigo ? ` (${p.productoCodigo})` : ""}
                               {p.unidad ? ` - ${p.unidad}` : ""}
                             </div>
                             {!!String(p.dosis || "").trim() && (
-                              <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
-                                Dosis: {p.dosis}
+                              <div style={{ marginTop: 4, fontSize: 13, color: "#475569" }}>
+                                <strong>Dosis:</strong> {p.dosis}
                               </div>
                             )}
                           </div>
@@ -714,28 +918,21 @@ function RecetasSucursales() {
               <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>
                 Confirmar Productos Entregados
               </h3>
-
-              <p style={{ margin: "0 0 18px", color: "#475569", lineHeight: 1.5 }}>
-                Marque los productos que fueron efectivamente entregados. Si un
-                producto no fue llevado completamente, desmarque y especifique la
-                cantidad entregada.
+              <p style={{ margin: "0 0 20px", color: "#475569", lineHeight: 1.5 }}>
+                Marque los productos que fueron efectivamente entregados. Si un producto no fue llevado
+                completamente, desmarque y especifique la cantidad entregada.
               </p>
 
               <div style={{ display: "grid", gap: 12, marginBottom: 22 }}>
-                {(Array.isArray(recetaSeleccionada.productos)
-                  ? recetaSeleccionada.productos
-                  : []
-                ).map((p, index) => {
-                  const estado = getEstadoProducto(p.detalleId, p.productoId);
-                  const entregadoCompleto = estado?.entregadoCompleto ?? true;
-                  const cantidadEntregada = estado?.cantidadEntregada ?? Number(p.cantidad || 0);
+                {(recetaSeleccionada.productos || []).map((producto, index) => {
+                  const estado = getEstadoProducto(producto.productoId, producto.detalleId);
 
                   return (
                     <div
-                      key={`${p.detalleId || p.productoId}-${index}`}
+                      key={`${producto.detalleId || producto.productoId}-${index}`}
                       style={{
-                        border: `1px solid ${entregadoCompleto ? "#bbf7d0" : "#fecaca"}`,
-                        background: entregadoCompleto ? "#f0fdf4" : "#fff7f7",
+                        border: "1px solid #bbf7d0",
+                        background: "#f0fdf4",
                         borderRadius: 16,
                         padding: 16,
                       }}
@@ -744,109 +941,99 @@ function RecetasSucursales() {
                         style={{
                           display: "flex",
                           justifyContent: "space-between",
-                          gap: 12,
                           alignItems: "flex-start",
+                          gap: 12,
                         }}
                       >
-                        <label
-                          style={{
-                            display: "flex",
-                            gap: 12,
-                            alignItems: "flex-start",
-                            flex: 1,
-                            cursor: "pointer",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={entregadoCompleto}
-                            onChange={(e) =>
-                              toggleProductoCompleto(
-                                p.detalleId,
-                                p.productoId,
-                                e.target.checked,
-                                Number(p.cantidad || 0)
-                              )
-                            }
-                            style={{ marginTop: 4 }}
-                          />
-                          <div>
-                            <strong style={{ display: "block", marginBottom: 6 }}>
-                              {p.productoNombre}
-                              {p.productoCodigo ? ` (${p.productoCodigo})` : ""}
-                            </strong>
-                            <div style={{ color: "#64748b", fontSize: 14 }}>
-                              Cantidad recetada: {p.cantidad} {p.unidad || ""}
+                        <div style={{ flex: 1 }}>
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              fontWeight: 800,
+                              color: "#0f172a",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!!estado?.entregadoCompleto}
+                              onChange={(e) =>
+                                toggleProductoCompleto(
+                                  producto.productoId,
+                                  e.target.checked,
+                                  Number(producto.cantidad || 0),
+                                  producto.detalleId
+                                )
+                              }
+                            />
+                            <span>
+                              {producto.productoNombre}
+                              {producto.productoCodigo ? ` (${producto.productoCodigo})` : ""}
+                            </span>
+                          </label>
+
+                          <div style={{ marginTop: 10, color: "#475569", fontSize: 14 }}>
+                            <div>
+                              <strong>Cantidad recetada:</strong> {producto.cantidad} {producto.unidad || ""}
                             </div>
-                            {!!String(p.dosis || "").trim() && (
-                              <div style={{ color: "#64748b", fontSize: 14, marginTop: 4 }}>
-                                Dosis: {p.dosis}
+                            {!!String(producto.dosis || "").trim() && (
+                              <div style={{ marginTop: 4 }}>
+                                <strong>Dosis:</strong> {producto.dosis}
                               </div>
                             )}
                           </div>
-                        </label>
+                        </div>
 
                         <span
                           style={{
-                            background: entregadoCompleto ? "#dcfce7" : "#fee2e2",
-                            color: entregadoCompleto ? "#166534" : "#b91c1c",
+                            background: estado?.entregadoCompleto ? "#dcfce7" : "#fee2e2",
+                            color: estado?.entregadoCompleto ? "#166534" : "#991b1b",
                             borderRadius: 999,
-                            padding: "5px 10px",
+                            padding: "6px 12px",
                             fontSize: 12,
                             fontWeight: 700,
+                            whiteSpace: "nowrap",
                           }}
                         >
-                          {entregadoCompleto ? "Llevado" : "No llevado"}
+                          {estado?.entregadoCompleto ? "Llevado" : "Parcial"}
                         </span>
                       </div>
 
-                      {!entregadoCompleto && (
-                        <div
-                          style={{
-                            marginTop: 14,
-                            border: "1px solid #fecaca",
-                            borderRadius: 12,
-                            padding: 12,
-                            maxWidth: 360,
-                            background: "#fff",
-                          }}
-                        >
+                      {!estado?.entregadoCompleto && (
+                        <div style={{ marginTop: 14 }}>
                           <label
                             style={{
                               display: "block",
-                              fontSize: 14,
-                              fontWeight: 700,
-                              color: "#dc2626",
                               marginBottom: 8,
+                              fontWeight: 700,
+                              color: "#0f172a",
                             }}
                           >
-                            ¿Cuántas unidades llevó realmente?
+                            Cantidad entregada
                           </label>
 
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <input
-                              type="number"
-                              min={0}
-                              max={Number(p.cantidad || 0)}
-                              value={cantidadEntregada}
-                              onChange={(e) =>
-                                cambiarCantidadEntregada(
-                                  p.detalleId,
-                                  p.productoId,
-                                  Number(e.target.value)
-                                )
-                              }
-                              style={{
-                                width: 100,
-                                borderRadius: 10,
-                                border: "1px solid #d9e2ec",
-                                padding: "10px 12px",
-                              }}
-                            />
-                            <span style={{ color: "#64748b", fontSize: 14 }}>
-                              de {p.cantidad} recetadas
-                            </span>
-                          </div>
+                          <input
+                            type="number"
+                            min={0}
+                            max={Number(producto.cantidad || 0)}
+                            value={Number(estado?.cantidadEntregada || 0)}
+                            onChange={(e) =>
+                              cambiarCantidadEntregada(
+                                producto.productoId,
+                                Number(e.target.value || 0),
+                                producto.detalleId
+                              )
+                            }
+                            style={{
+                              width: "100%",
+                              borderRadius: 12,
+                              border: "1px solid #d9e2ec",
+                              padding: "12px 14px",
+                              fontSize: 15,
+                            }}
+                          />
                         </div>
                       )}
                     </div>
@@ -858,10 +1045,6 @@ function RecetasSucursales() {
                 <label style={{ display: "block", marginBottom: 8, fontWeight: 700 }}>
                   Número de Factura *
                 </label>
-
-                <p style={{ margin: "0 0 8px", color: "#64748b", fontSize: 14 }}>
-                  Ingrese el número de factura o documento de entrega.
-                </p>
 
                 <input
                   type="text"
@@ -901,7 +1084,7 @@ function RecetasSucursales() {
 
               <div
                 style={{
-                  marginBottom: 22,
+                  marginBottom: 16,
                   border: "1px solid #fde68a",
                   background: "#fffbeb",
                   color: "#92400e",
@@ -917,8 +1100,8 @@ function RecetasSucursales() {
                     Acción Irreversible
                   </strong>
                   <span>
-                    Una vez finalizada la confirmación, no podrá editar los productos
-                    entregados. Asegúrese de verificar toda la información antes de continuar.
+                    Una vez finalizada la confirmación, no podrá editar los productos entregados.
+                    Asegúrese de verificar toda la información antes de continuar.
                   </span>
                 </div>
               </div>
@@ -951,8 +1134,7 @@ function RecetasSucursales() {
                 </label>
 
                 <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: 14 }}>
-                  Si marca esta opción, al finalizar se abrirá la receta para imprimirla
-                  o guardarla como PDF.
+                  Si marca esta opción, al finalizar se abrirá una versión lista para imprimir o guardar como PDF.
                 </p>
               </div>
 
