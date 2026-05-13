@@ -368,11 +368,25 @@ async function listItems(listName) {
   const columns = await getListColumns(listName, false);
   const expand = buildFieldsExpand(columns);
 
-  const data = await graphFetch(
-    `/sites/${siteId}/lists/${listId}/items?${expand}&$top=999`
-  );
+  let endpoint = `/sites/${siteId}/lists/${listId}/items?${expand}&$top=999`;
+  let items = [];
 
-  return data.value || [];
+  while (endpoint) {
+    const data = await graphFetch(endpoint);
+
+    items = items.concat(data.value || []);
+
+    if (data["@odata.nextLink"]) {
+      endpoint = data["@odata.nextLink"].replace(
+        "https://graph.microsoft.com/v1.0",
+        ""
+      );
+    } else {
+      endpoint = null;
+    }
+  }
+
+  return items;
 }
 
 async function getItem(listName, itemId) {
