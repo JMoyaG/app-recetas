@@ -239,25 +239,63 @@ export async function getClientes(): Promise<ClienteSP[]> {
 }
 
 export async function createCliente(payload: Omit<ClienteSP, "id">) {
-  return await http<ClienteSP>("/clientes", {
+  const res = await fetch(`${API_URL}/clientes`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new Error(data?.error || data?.message || "No se pudo crear cliente");
+  }
+
+  return data as ClienteSP;
 }
 
 export async function updateCliente(id: number, payload: Omit<ClienteSP, "id">) {
-  return await http<ClienteSP>(`/clientes/${id}`, {
+  const res = await fetch(`${API_URL}/clientes/${id}`, {
     method: "PUT",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new Error(data?.error || data?.message || "No se pudo actualizar cliente");
+  }
+
+  return data as ClienteSP;
 }
 
 export async function deleteCliente(id: number) {
-  return await http(`/clientes/${id}`, { method: "DELETE" });
+  const res = await fetch(`${API_URL}/clientes/${id}`, {
+    method: "DELETE",
+  });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new Error(data?.error || data?.message || "No se pudo eliminar cliente");
+  }
+
+  return data;
 }
 
 export async function importarClientesMasivo() {
-  return await http("/clientes/importar", { method: "POST" });
+  const res = await fetch(`${API_URL}/clientes/importar`, {
+    method: "POST",
+  });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new Error(data?.error || data?.message || "No se pudo importar clientes");
+  }
+
+  return data;
 }
 
 export async function getIngenieros(): Promise<IngenieroSP[]> {
