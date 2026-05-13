@@ -229,7 +229,13 @@ export async function login(usuario: string, password: string) {
 }
 
 export async function getClientes(): Promise<ClienteSP[]> {
-  return await http<ClienteSP[]>("/clientes");
+  const res = await fetch(`${API_URL}/clientes`);
+
+  if (!res.ok) {
+    throw new Error("Error cargando clientes desde SharePoint");
+  }
+
+  return await res.json();
 }
 
 export async function createCliente(payload: Omit<ClienteSP, "id">) {
