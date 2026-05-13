@@ -1662,7 +1662,7 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-app.get("/api/clientes", authMiddleware, async (_req, res) => {
+app.get("/api/clientes", async (_req, res) => {
   try {
     res.json(await getClientesData());
   } catch (error) {
