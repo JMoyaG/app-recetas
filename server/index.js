@@ -1208,8 +1208,20 @@ function buildHistorialProductoFields(payload, columns) {
 
 async function getClientesData() {
   const items = await listItems(LIST_NAMES.clientes);
-  await ensureTitlesForItems(LIST_NAMES.clientes, items, ["Nombre", "Razón Social", "Razon Social", "Cliente"]);
-  return items.map(mapClienteFromFields);
+  await ensureTitlesForItems(
+    LIST_NAMES.clientes,
+    items,
+    ["Nombre", "Razón Social", "Razon Social", "Cliente"]
+  );
+
+  return items
+    .map(mapClienteFromFields)
+    .filter((x) => String(x.nombre || "").trim() !== "")
+    .sort((a, b) =>
+      String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", {
+        sensitivity: "base",
+      })
+    );
 }
 
 async function getIngenierosData() {
@@ -1671,7 +1683,7 @@ app.get("/api/clientes", async (_req, res) => {
   }
 });
 
-app.post("/api/clientes", authMiddleware, async (req, res) => {
+app.post("/api/clientes", async (req, res) => {
   try {
     const columns = await getListColumns(LIST_NAMES.clientes, false);
     const created = await createItem(
@@ -1686,7 +1698,7 @@ app.post("/api/clientes", authMiddleware, async (req, res) => {
   }
 });
 
-app.put("/api/clientes/:id", authMiddleware, async (req, res) => {
+app.put("/api/clientes/:id", async (req, res) => {
   try {
     const columns = await getListColumns(LIST_NAMES.clientes, false);
     await updateItem(LIST_NAMES.clientes, req.params.id, buildClienteFields(req.body || {}, columns));
@@ -1698,7 +1710,7 @@ app.put("/api/clientes/:id", authMiddleware, async (req, res) => {
   }
 });
 
-app.delete("/api/clientes/:id", authMiddleware, async (req, res) => {
+app.delete("/api/clientes/:id", async (req, res) => {
   try {
     await deleteItem(LIST_NAMES.clientes, req.params.id);
     res.json({ ok: true });
@@ -1708,7 +1720,7 @@ app.delete("/api/clientes/:id", authMiddleware, async (req, res) => {
   }
 });
 
-app.post("/api/clientes/importar", authMiddleware, async (_req, res) => {
+app.post("/api/clientes/importar", async (_req, res) => {
   res.json({ ok: true, resultado: { message: "Importación no implementada en esta versión" } });
 });
 
