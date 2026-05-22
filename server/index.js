@@ -55,6 +55,33 @@ const LIST_ID_CACHE = new Map();
 const COLUMNS_CACHE = new Map();
 const TITLE_SYNC_DONE = new Set();
 
+// Cache simple en memoria para que Render no tenga que pedirle TODO a SharePoint
+// en cada entrada a la pantalla. En Render se reinicia cuando el servicio reinicia,
+// pero mientras está vivo responde casi instantáneo.
+const DATA_CACHE = new Map();
+const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS || 10 * 60 * 1000);
+
+function getCache(key) {
+  const hit = DATA_CACHE.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    DATA_CACHE.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function setCache(key, value, ttlMs = CACHE_TTL_MS) {
+  DATA_CACHE.set(key, { value, expiresAt: Date.now() + ttlMs });
+  return value;
+}
+
+function clearCache(keyPrefix = "") {
+  for (const key of DATA_CACHE.keys()) {
+    if (!keyPrefix || key.startsWith(keyPrefix)) DATA_CACHE.delete(key);
+  }
+}
+
 function decodeSharePointEscapes(value) {
   return String(value ?? "").replace(/_x([0-9a-fA-F]{4})_/g, (_, hex) => {
     try {
@@ -365,7 +392,7 @@ function buildFieldsExpand(columns = []) {
 async function listItems(listName) {
   const siteId = await getSiteId();
   const listId = await getListIdByName(listName);
-  const columns = await getListColumns(listName, false);
+  const columns = await getListColumns(listName, true);
   const expand = buildFieldsExpand(columns);
 
   let endpoint = `/sites/${siteId}/lists/${listId}/items?${expand}&$top=999`;
@@ -1220,15 +1247,20 @@ function buildHistorialProductoFields(payload, columns) {
   return fields;
 }
 
-async function getClientesData() {
-  const items = await listItems(LIST_NAMES.clientes);
-  await ensureTitlesForItems(
-    LIST_NAMES.clientes,
-    items,
-    ["Nombre", "Razón Social", "Razon Social", "Cliente"]
-  );
+async function getClientesData({ forceRefresh = false } = {}) {
+  const cacheKey = "clientes:all";
+  if (!forceRefresh) {
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+  }
 
-  return items
+  const started = Date.now();
+  const items = await listItems(LIST_NAMES.clientes);
+
+  // OJO: antes este GET también intentaba actualizar Title en SharePoint.
+  // Eso hace miles de PATCH silenciosos y vuelve lentísima la carga.
+  // Para listar clientes solo leemos y mapeamos.
+  const clientes = items
     .map(mapClienteFromFields)
     .filter((x) => String(x.nombre || "").trim() !== "")
     .sort((a, b) =>
@@ -1236,6 +1268,9 @@ async function getClientesData() {
         sensitivity: "base",
       })
     );
+
+  console.log(`CLIENTES cargados: ${clientes.length} en ${Date.now() - started}ms`);
+  return setCache(cacheKey, clientes);
 }
 
 async function getIngenierosData() {
@@ -1705,6 +1740,7 @@ app.post("/api/clientes", async (req, res) => {
       buildClienteFields(req.body || {}, columns)
     );
     const item = await getItem(LIST_NAMES.clientes, created.id);
+    clearCache("clientes:");
     res.json(mapClienteFromFields(item));
   } catch (error) {
     console.error("ERROR CREATE CLIENTE:", error);
@@ -1717,6 +1753,7 @@ app.put("/api/clientes/:id", async (req, res) => {
     const columns = await getListColumns(LIST_NAMES.clientes, false);
     await updateItem(LIST_NAMES.clientes, req.params.id, buildClienteFields(req.body || {}, columns));
     const item = await getItem(LIST_NAMES.clientes, req.params.id);
+    clearCache("clientes:");
     res.json(mapClienteFromFields(item));
   } catch (error) {
     console.error("ERROR UPDATE CLIENTE:", error);
@@ -1727,6 +1764,7 @@ app.put("/api/clientes/:id", async (req, res) => {
 app.delete("/api/clientes/:id", async (req, res) => {
   try {
     await deleteItem(LIST_NAMES.clientes, req.params.id);
+    clearCache("clientes:");
     res.json({ ok: true });
   } catch (error) {
     console.error("ERROR DELETE CLIENTE:", error);
@@ -1735,6 +1773,7 @@ app.delete("/api/clientes/:id", async (req, res) => {
 });
 
 app.post("/api/clientes/importar", async (_req, res) => {
+  clearCache("clientes:");
   res.json({ ok: true, resultado: { message: "Importación no implementada en esta versión" } });
 });
 
