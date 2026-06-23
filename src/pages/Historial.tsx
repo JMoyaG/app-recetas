@@ -26,13 +26,6 @@ function formatDate(value?: string) {
   return date.toLocaleString("es-CR", { dateStyle: "long", timeStyle: "short" });
 }
 
-function formatMoney(value?: number) {
-  return Number(value || 0).toLocaleString("es-CR", {
-    style: "currency",
-    currency: "CRC",
-    maximumFractionDigits: 0,
-  });
-}
 
 function formatQty(value?: number) {
   return Number(value || 0).toLocaleString("es-CR", { maximumFractionDigits: 2 });
@@ -183,7 +176,7 @@ export default function Historial() {
                         <div><strong>Finca:</strong> {item.fincaNombre || "-"}</div>
                         <div><strong>¿Para cuánto es?:</strong> {item.paraCuantoEs || "-"}</div>
                         <div><strong>Lote / Cultivo:</strong> {item.lotesCultivos || "-"}</div>
-                        <div><strong>Precio aprox:</strong> {formatMoney(item.precioTotalVenta || 0)}</div>
+                       
                       </div>
                     </div>
                   </div>
@@ -221,9 +214,7 @@ export default function Historial() {
                           <div style={{ color: "#15803d", fontSize: 13, fontWeight: 700 }}>
                             Inventario al crear receta: {formatQty(p.inventarioMomento ?? p.disponibleMomento ?? 0)}
                           </div>
-                          <div style={{ color: "#475569", fontSize: 13 }}>
-                            Precio aprox: {formatMoney(p.precioVenta || 0)} · Total: {formatMoney(p.totalVenta || 0)}
-                          </div>
+                          
                           {p.fueCambiado && (
                             <div style={{ color: "#1e3a8a", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: "8px 10px", marginTop: 4 }}>
                               <strong>Cambio:</strong> {p.cambioProducto || `${p.productoOriginalNombre || p.productoNombre || "Original"} → ${p.productoCambioNombre || "Producto nuevo"}`}

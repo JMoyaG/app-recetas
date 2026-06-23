@@ -674,10 +674,59 @@ async function createItem(listName, fields) {
   const columns = await getListColumns(listName, false);
   const safeFields = sanitizeFieldsForWrite(fields, columns);
 
-  return await graphFetch(`/sites/${siteId}/lists/${listId}/items`, {
-    method: "POST",
-    body: { fields: safeFields },
-  });
+  try {
+    return await graphFetch(`/sites/${siteId}/lists/${listId}/items`, {
+      method: "POST",
+      body: { fields: safeFields },
+    });
+  } catch (error) {
+    // Graph puede rechazar todo el POST por una sola columna inválida
+    // (muy común con lookup/texto o columnas recién creadas). Creamos
+    // el elemento mínimo y luego aplicamos campo por campo para no perder
+    // el historial de BI.
+    console.error("SP CREATE completo falló, creando mínimo y reintentando campos:", {
+      listName,
+      safeFields,
+      error: error?.message || error,
+    });
+
+    const minimalTitle = String(safeFields.Title || fields?.Title || listName || "Nuevo");
+    const created = await graphFetch(`/sites/${siteId}/lists/${listId}/items`, {
+      method: "POST",
+      body: { fields: { Title: minimalTitle } },
+    });
+
+    const fieldsToApply = { ...safeFields };
+    delete fieldsToApply.Title;
+
+    const applied = {};
+    const skipped = {};
+
+    for (const [key, value] of Object.entries(fieldsToApply)) {
+      try {
+        await graphFetch(`/sites/${siteId}/lists/${listId}/items/${created.id}/fields`, {
+          method: "PATCH",
+          body: { [key]: value },
+        });
+        applied[key] = value;
+      } catch (fieldError) {
+        skipped[key] = fieldError?.message || String(fieldError);
+        console.error("SP CREATE campo omitido por error Graph:", {
+          listName,
+          itemId: created.id,
+          key,
+          value,
+          error: skipped[key],
+        });
+      }
+    }
+
+    if (Object.keys(skipped).length) {
+      console.warn("SP CREATE creado con campos omitidos:", { listName, itemId: created.id, applied, skipped });
+    }
+
+    return created;
+  }
 }
 
 async function updateItem(listName, itemId, fields) {
@@ -953,6 +1002,21 @@ function resolveLookupWriteKey(columns, candidates = []) {
 
 function resolveWriteName(columns, candidates = []) {
   const col = resolveColumn(columns, candidates, { writableOnly: true });
+  return col?.name || null;
+}
+
+function resolvePlainWriteName(columns, candidates = []) {
+  const normalized = (candidates || []).map(norm);
+  const col = (columns || []).find((column) => {
+    if (!isWritableColumn(column)) return false;
+    if (column.lookup) return false;
+    const targets = [column.name, column.displayName, column.description]
+      .filter(Boolean)
+      .map(norm);
+    return normalized.some((candidate) =>
+      targets.some((target) => target === candidate || target.includes(candidate))
+    );
+  });
   return col?.name || null;
 }
 
@@ -1563,17 +1627,22 @@ function buildHistorialFields(payload, columns) {
   const sucursalLookupKey = resolveLookupWriteKey(columns, ["Sucursal"]);
   const ingenieroLookupKey = resolveLookupWriteKey(columns, ["Ingeniero"]);
 
-  if (clienteLookupKey && payload.clienteId) fields[clienteLookupKey] = Number(payload.clienteId);
-  else setIfExists(fields, resolveWriteName(columns, ["Cliente"]), String(payload.clienteNombre || ""));
+  // Cliente viene desde SQL, por eso NO lo forzamos como lookup si no
+  // corresponde a un item real de SP_Cliente. Si la columna Cliente es
+  // lookup y no hay id válido, la omitimos para que Graph no rechace el
+  // historial completo. Para BI, si existe ClienteNombre/ClienteTexto, se llena.
+  if (clienteLookupKey && payload.clienteLookupId) fields[clienteLookupKey] = Number(payload.clienteLookupId);
+  else setIfExists(fields, resolvePlainWriteName(columns, ["Cliente", "ClienteNombre", "Cliente Nombre", "ClienteTexto", "Cliente Texto"]), String(payload.clienteNombre || ""));
+  setIfExists(fields, resolvePlainWriteName(columns, ["ClienteNombre", "Cliente Nombre", "ClienteTexto", "Cliente Texto"]), String(payload.clienteNombre || ""));
 
   if (fincaLookupKey && payload.fincaId) fields[fincaLookupKey] = Number(payload.fincaId);
-  else setIfExists(fields, resolveWriteName(columns, ["Finca"]), String(payload.fincaNombre || ""));
+  else setIfExists(fields, resolvePlainWriteName(columns, ["Finca", "FincaNombre", "Finca Nombre"]), String(payload.fincaNombre || ""));
 
   if (sucursalLookupKey && payload.sucursalId) fields[sucursalLookupKey] = Number(payload.sucursalId);
-  else setIfExists(fields, resolveWriteName(columns, ["Sucursal"]), String(payload.sucursalNombre || ""));
+  else setIfExists(fields, resolvePlainWriteName(columns, ["Sucursal", "SucursalNombre", "Sucursal Nombre"]), String(payload.sucursalNombre || ""));
 
   if (ingenieroLookupKey && payload.ingenieroId) fields[ingenieroLookupKey] = Number(payload.ingenieroId);
-  else setIfExists(fields, resolveWriteName(columns, ["Ingeniero"]), String(payload.ingenieroNombre || ""));
+  else setIfExists(fields, resolvePlainWriteName(columns, ["Ingeniero", "IngenieroNombre", "Ingeniero Nombre"]), String(payload.ingenieroNombre || ""));
 
   setIfExists(fields, resolveWriteName(columns, ["Estado", "EstadoFinal"]), String(payload.estadoFinal || payload.estado || "Entregada"));
   setIfExists(fields, resolveWriteName(columns, ["FechaCreacion", "Fecha Creación"]), payload.fechaCreacion || nowIso());
@@ -1589,10 +1658,11 @@ function buildHistorialFields(payload, columns) {
 
   setIfExists(fields, resolveWriteName(columns, ["Factura"]), String(payload.factura || ""));
   setIfExists(fields, resolveWriteName(columns, ["Observacion", "Observación"]), withAppMeta(String(payload.observacion || ""), historialMeta));
+  setIfExists(fields, resolveWriteName(columns, ["ObservacionIngeniero", "Observación Ingeniero", "ObservacionGeneral", "Observación General"]), String(payload.observacion || ""));
   setIfExists(fields, resolveWriteName(columns, ["ObservacionEntrega", "Observación Entrega", "ObservacionSucursal", "Observación Sucursal"]), String(payload.observacionEntrega || ""));
   setIfExists(fields, resolveWriteName(columns, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]), historialMeta.paraCuantoEs);
   setIfExists(fields, resolveWriteName(columns, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]), historialMeta.lotesCultivos);
-  setIfExists(fields, resolveWriteName(columns, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), historialMeta.precioTotalVenta);
+  setIfExists(fields, resolveWriteName(columns, ["PrecioTotalAprox", "Precio Total Aprox", "PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), historialMeta.precioTotalVenta);
   setIfExists(fields, resolveWriteName(columns, ["TotalProductos"]), safeNumber(payload.totalProductos));
   setIfExists(fields, resolveWriteName(columns, ["TotalSolicitado"]), safeNumber(payload.totalSolicitado));
   setIfExists(fields, resolveWriteName(columns, ["TotalEntregado"]), safeNumber(payload.totalEntregado));
@@ -1637,19 +1707,42 @@ function buildHistorialProductoFields(payload, columns) {
     motivoCambio: String(payload.motivoCambio || ""),
   };
 
+  const productoOriginal = firstText(
+    historialProductoMeta.productoOriginalNombre,
+    payload.productoNombre,
+    payload.otroProductoNombre
+  );
+  const productoEntregado = historialProductoMeta.fueCambiado
+    ? firstText(historialProductoMeta.productoCambioNombre, payload.otroProductoNombre, payload.productoNombre)
+    : firstText(payload.productoNombre, payload.otroProductoNombre);
+  const dosisOriginal = String(payload.dosis || "");
+  const dosisEntregada = firstText(payload.dosisEntregada, payload.dosis);
+  const fueEntregado = !historialProductoMeta.fueCambiado && safeNumber(payload.cantidadEntregada, 0) > 0;
+  const cambioDescripcion = historialProductoMeta.fueCambiado
+    ? firstText(
+        historialProductoMeta.cambioProducto,
+        `${productoOriginal || "Producto original"} -> ${productoEntregado || "Producto nuevo"}`
+      )
+    : "";
+
   setIfExists(fields, resolveWriteName(columns, ["PorcentajeCumplimiento", "Porcentaje Cumplimiento"]), safeNumber(payload.porcentajeCumplimiento));
   setIfExists(fields, resolveWriteName(columns, ["Dosis"]), withAppMeta(String(payload.dosis || ""), historialProductoMeta));
-  setIfExists(fields, resolveWriteName(columns, ["InventarioMomento", "Inventario Momento", "DisponibleMomento", "Disponible Momento", "Inventario"]), historialProductoMeta.inventarioMomento);
+  setIfExists(fields, resolveWriteName(columns, ["DosisOriginal", "Dosis Original"]), dosisOriginal);
+  setIfExists(fields, resolveWriteName(columns, ["DosisEntregada", "Dosis Entregada"]), dosisEntregada);
+  setIfExists(fields, resolveWriteName(columns, ["InventarioAlCrear", "Inventario Al Crear", "InventarioMomento", "Inventario Momento", "DisponibleMomento", "Disponible Momento", "Inventario"]), historialProductoMeta.inventarioMomento);
   setIfExists(fields, resolveWriteName(columns, ["EsOtroProducto", "Es Otro Producto"]), !!payload.esOtroProducto);
   setIfExists(fields, resolveWriteName(columns, ["OtroProductoNombre", "Otro Producto Nombre"]), String(payload.otroProductoNombre || ""));
-  setIfExists(fields, resolveWriteName(columns, ["PrecioVenta", "Precio Venta"]), historialProductoMeta.precioVenta);
+  setIfExists(fields, resolveWriteName(columns, ["PrecioAproxProducto", "Precio Aprox Producto", "PrecioVenta", "Precio Venta"]), historialProductoMeta.precioVenta);
   setIfExists(fields, resolveWriteName(columns, ["TotalVenta", "Total Venta"]), historialProductoMeta.totalVenta);
+  setIfExists(fields, resolveWriteName(columns, ["FueEntregado", "Fue Entregado"]), fueEntregado);
   setIfExists(fields, resolveWriteName(columns, ["FueCambiado", "Fue Cambiado", "ProductoCambiado"]), historialProductoMeta.fueCambiado);
-  setIfExists(fields, resolveWriteName(columns, ["ProductoOriginalNombre", "Producto Original Nombre", "ProductoOriginal"]), historialProductoMeta.productoOriginalNombre);
+  setIfExists(fields, resolveWriteName(columns, ["ProductoOriginal", "Producto Original", "ProductoOriginalNombre", "Producto Original Nombre"]), productoOriginal);
+  setIfExists(fields, resolveWriteName(columns, ["ProductoEntregado", "Producto Entregado", "ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]), productoEntregado);
   setIfExists(fields, resolveWriteName(columns, ["CodigoProductoOriginal", "Codigo Producto Original", "Código Producto Original"]), historialProductoMeta.codigoProductoOriginal);
   setIfExists(fields, resolveWriteName(columns, ["ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]), historialProductoMeta.productoCambioNombre);
   setIfExists(fields, resolveWriteName(columns, ["CodigoProductoCambio", "Codigo Producto Cambio", "Código Producto Cambio"]), historialProductoMeta.productoCambioCodigo);
-  setIfExists(fields, resolveWriteName(columns, ["CambioProducto", "Cambio Producto", "Cambio"]), historialProductoMeta.cambioProducto);
+  setIfExists(fields, resolveWriteName(columns, ["CambioDescripcion", "Cambio Descripcion", "Cambio Descripción", "CambioProducto", "Cambio Producto", "Cambio"]), cambioDescripcion);
+  setIfExists(fields, resolveWriteName(columns, ["CambioProducto", "Cambio Producto", "Cambio"]), cambioDescripcion);
   setIfExists(fields, resolveWriteName(columns, ["MotivoCambio", "Motivo Cambio"]), historialProductoMeta.motivoCambio);
   return fields;
 }
@@ -2036,13 +2129,14 @@ async function syncHistorialFromReceta(recetaId) {
         stockMomento: producto.stockMomento || 0,
         reservadaMomento: producto.reservadaMomento || 0,
         fueCambiado: !!producto.fueCambiado,
-        productoOriginalNombre: producto.productoOriginalNombre || "",
-        codigoProductoOriginal: producto.codigoProductoOriginal || "",
+        productoOriginalNombre: producto.productoOriginalNombre || producto.productoNombre || "",
+        codigoProductoOriginal: producto.codigoProductoOriginal || producto.productoCodigo || "",
         productoCambioNombre: producto.productoCambioNombre || "",
         productoCambioCodigo: producto.productoCambioCodigo || "",
         productoCambioUnidad: producto.productoCambioUnidad || "",
-        cambioProducto: producto.cambioProducto || "",
+        cambioProducto: producto.cambioProducto || (producto.fueCambiado ? `${producto.productoOriginalNombre || producto.productoNombre || "Producto original"} -> ${producto.productoCambioNombre || "Producto nuevo"}` : ""),
         motivoCambio: producto.motivoCambio || "",
+        dosisEntregada: producto.dosis || "",
         esOtroProducto: !!producto.esOtroProducto,
         otroProductoNombre: producto.otroProductoNombre || "",
       },
@@ -2083,17 +2177,17 @@ async function getHistorialData() {
         0
       ),
       dosis: stripAppMeta(rawDosis),
-      precioVenta: firstNumber(getFieldValue(f, ["PrecioVenta", "Precio Venta"]), meta.precioVenta, 0),
+      precioVenta: firstNumber(getFieldValue(f, ["PrecioAproxProducto", "Precio Aprox Producto", "PrecioVenta", "Precio Venta"]), meta.precioVenta, 0),
       totalVenta: firstNumber(getFieldValue(f, ["TotalVenta", "Total Venta"]), meta.totalVenta, 0),
-      inventarioMomento: firstNumber(getFieldValue(f, ["InventarioMomento", "Inventario Momento", "DisponibleMomento", "Disponible Momento", "Inventario"]), meta.inventarioMomento, meta.disponibleMomento, 0),
+      inventarioMomento: firstNumber(getFieldValue(f, ["InventarioAlCrear", "Inventario Al Crear", "InventarioMomento", "Inventario Momento", "DisponibleMomento", "Disponible Momento", "Inventario"]), meta.inventarioMomento, meta.disponibleMomento, 0),
       disponibleMomento: firstNumber(getFieldValue(f, ["DisponibleMomento", "Disponible Momento", "Disponible", "InventarioMomento", "Inventario Momento"]), meta.disponibleMomento, meta.inventarioMomento, 0),
       fueCambiado,
       productoOriginalNombre: firstText(getFieldValue(f, ["ProductoOriginalNombre", "Producto Original Nombre", "ProductoOriginal"]), meta.productoOriginalNombre),
       codigoProductoOriginal: firstText(getFieldValue(f, ["CodigoProductoOriginal", "Codigo Producto Original", "Código Producto Original"]), meta.codigoProductoOriginal),
-      productoCambioNombre: firstText(getFieldValue(f, ["ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]), meta.productoCambioNombre),
+      productoCambioNombre: firstText(getFieldValue(f, ["ProductoEntregado", "Producto Entregado", "ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]), meta.productoCambioNombre),
       productoCambioCodigo: firstText(getFieldValue(f, ["CodigoProductoCambio", "Codigo Producto Cambio", "Código Producto Cambio"]), meta.productoCambioCodigo),
       productoCambioUnidad: firstText(meta.productoCambioUnidad),
-      cambioProducto: firstText(getFieldValue(f, ["CambioProducto", "Cambio Producto", "Cambio"]), meta.cambioProducto),
+      cambioProducto: firstText(getFieldValue(f, ["CambioDescripcion", "Cambio Descripcion", "Cambio Descripción", "CambioProducto", "Cambio Producto", "Cambio"]), meta.cambioProducto),
       motivoCambio: firstText(getFieldValue(f, ["MotivoCambio", "Motivo Cambio"]), meta.motivoCambio),
       esOtroProducto: parseBoolean(getFieldValue(f, ["EsOtroProducto", "Es Otro Producto"])),
       otroProductoNombre: String(getFieldValue(f, ["OtroProductoNombre", "Otro Producto Nombre"]) || "").trim(),
@@ -2115,16 +2209,16 @@ async function getHistorialData() {
     return {
       id,
       numero: String(getFieldValue(f, ["NumeroReceta", "Numero Receta"]) || id),
-      clienteNombre: String(getFieldValue(f, ["Cliente"]) || "").trim(),
+      clienteNombre: String(getFieldValue(f, ["ClienteNombre", "Cliente Nombre", "ClienteTexto", "Cliente Texto", "Cliente"]) || "").trim(),
       fincaNombre: String(getFieldValue(f, ["Finca"]) || "").trim(),
       ingenieroNombre: String(getFieldValue(f, ["Ingeniero"]) || "").trim(),
       sucursalNombre: String(getFieldValue(f, ["Sucursal"]) || "").trim(),
       factura: String(getFieldValue(f, ["Factura"]) || "").trim(),
-      observacion: firstText(stripAppMeta(rawObservacion), meta.observacionGeneral),
+      observacion: firstText(getFieldValue(f, ["ObservacionIngeniero", "Observación Ingeniero", "ObservacionGeneral", "Observación General"]), stripAppMeta(rawObservacion), meta.observacionGeneral),
       observacionEntrega: firstText(getFieldValue(f, ["ObservacionEntrega", "Observación Entrega", "ObservacionSucursal", "Observación Sucursal"]), meta.observacionEntrega),
       paraCuantoEs: firstText(getFieldValue(f, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]), meta.paraCuantoEs),
       lotesCultivos: firstText(getFieldValue(f, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]), meta.lotesCultivos),
-      precioTotalVenta: firstNumber(getFieldValue(f, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), meta.precioTotalVenta, 0),
+      precioTotalVenta: firstNumber(getFieldValue(f, ["PrecioTotalAprox", "Precio Total Aprox", "PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), meta.precioTotalVenta, 0),
       totalSolicitado: safeNumber(getFieldValue(f, ["TotalSolicitado"]), 0),
       totalEntregado: safeNumber(getFieldValue(f, ["TotalEntregado"]), 0),
       productosCompletos: safeNumber(getFieldValue(f, ["ProductosCompletos"]), 0),

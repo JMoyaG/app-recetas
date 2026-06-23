@@ -90,14 +90,6 @@ function formatFecha(fecha?: string) {
   return date.toLocaleString();
 }
 
-function formatMoney(value?: number) {
-  const n = Number(value || 0);
-  return n.toLocaleString("es-CR", {
-    style: "currency",
-    currency: "CRC",
-    maximumFractionDigits: 0,
-  });
-}
 
 function formatCantidad(value?: number) {
   const n = Number(value || 0);
@@ -526,7 +518,7 @@ function RecetasSucursales() {
                   <p class="obs-text"><strong>¿Para cuánto es?:</strong> ${escapeHtml(receta.paraCuantoEs || "-")}</p>
                   <p class="obs-text"><strong>Lotes/Cultivos:</strong> ${escapeHtml(receta.lotesCultivos || "-")}</p>
                   <p class="obs-text"><strong>Observación general:</strong> ${escapeHtml(receta.observacion || "-")}</p>
-                  <p class="obs-text"><strong>Precio aprox:</strong> ${escapeHtml(formatMoney(receta.precioTotalVenta || 0))}</p>
+                
                 </div>
 
                 <div class="delivery-box">
@@ -1002,9 +994,7 @@ function RecetasSucursales() {
                             <div style={{ marginTop: 4, fontSize: 13, color: "#15803d", fontWeight: 700 }}>
                               Inventario al crear: {formatCantidad(Number(p.inventarioMomento ?? p.disponibleMomento ?? 0))}
                             </div>
-                            <div style={{ marginTop: 4, fontSize: 13, color: "#475569" }}>
-                              Precio aprox: {formatMoney(p.precioVenta || 0)}
-                            </div>
+                            
                           </div>
                           <strong>{p.cantidad}</strong>
                         </div>
@@ -1192,9 +1182,7 @@ function RecetasSucursales() {
                             <div style={{ marginTop: 4, color: "#15803d", fontWeight: 700 }}>
                               <strong>Inventario al crear receta:</strong> {formatCantidad(Number(producto.inventarioMomento ?? producto.disponibleMomento ?? 0))}
                             </div>
-                            <div style={{ marginTop: 4 }}>
-                              <strong>Precio aprox producto:</strong> {formatMoney(producto.precioVenta || 0)}
-                            </div>
+                            
                           </div>
                         </div>
 
