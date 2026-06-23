@@ -319,287 +319,244 @@ function RecetasSucursales() {
     try {
       const productos = Array.isArray(receta.productos) ? receta.productos : [];
 
-    const productosHtml = productos
-      .map((p, index) => {
-        const estado = getEstadoProducto(p.productoId, p.detalleId);
-        const productoTexto = estado?.fueCambiado && estado.productoCambioNombre
-          ? `${p.productoNombre || "-"} -> ${estado.productoCambioNombre}`
-          : p.productoNombre || "-";
-        const codigoTexto = estado?.fueCambiado && estado.productoCambioCodigo
-          ? `${p.productoCodigo || "-"} -> ${estado.productoCambioCodigo}`
-          : p.productoCodigo || "-";
-        const cantidadTexto = `${Number(estado?.cantidadEntregada ?? p.cantidad ?? 0)} de ${Number(p.cantidad || 0)}`;
-        const inventarioTexto = Number(p.inventarioMomento ?? p.disponibleMomento ?? 0) > 0
-          ? `Inventario al crear: ${formatCantidad(Number(p.inventarioMomento ?? p.disponibleMomento ?? 0))}`
-          : "-";
-        const cambioTexto = estado?.fueCambiado && estado.productoCambioNombre
-          ? `Cambio: ${p.productoNombre || "Original"} -> ${estado.productoCambioNombre}${estado.motivoCambio ? ` | Motivo: ${estado.motivoCambio}` : ""}`
-          : "";
-        return `
-          <tr>
-            <td>${index + 1}</td>
-            <td>${escapeHtml(productoTexto)}${cambioTexto ? `<br/><small>${escapeHtml(cambioTexto)}</small>` : ""}</td>
-            <td>${escapeHtml(codigoTexto)}</td>
-            <td>${escapeHtml(estado?.productoCambioUnidad || p.unidad || "-")}</td>
-            <td>${escapeHtml(cantidadTexto)}</td>
-            <td>${escapeHtml(p.dosis || "-")}</td>
-            <td>${escapeHtml(inventarioTexto)}</td>
-          </tr>
-        `;
-      })
-      .join("");
+      const productosHtml = productos
+        .map((p) => {
+          const estado = getEstadoProducto(p.productoId, p.detalleId);
+          const originalNombre =
+            p.productoOriginalNombre ||
+            p.productoNombre ||
+            "-";
+          const cambioNombre =
+            estado?.fueCambiado && estado.productoCambioNombre
+              ? estado.productoCambioNombre
+              : p.fueCambiado && p.productoCambioNombre
+                ? p.productoCambioNombre
+                : "";
+          const motivoCambio =
+            estado?.motivoCambio ||
+            p.motivoCambio ||
+            "";
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="UTF-8" />
-          <title>Receta ${escapeHtml(receta.numero)}</title>
-          <style>
-            * { box-sizing: border-box; }
-            body {
-              margin: 0;
-              font-family: Arial, Helvetica, sans-serif;
-              color: #0f172a;
-              background: #f8fafc;
-            }
-            .page {
-              width: 100%;
-              max-width: 900px;
-              margin: 28px auto;
-              background: #ffffff;
-              border-radius: 18px;
-              overflow: hidden;
-              box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
-              border: 1px solid #e2e8f0;
-            }
-            .topbar {
-              height: 10px;
-              background: linear-gradient(90deg, #0ea5e9, #22c55e, #eab308, #f97316);
-            }
-            .header {
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 16px;
-              padding: 24px 28px 18px;
-              border-bottom: 1px solid #e2e8f0;
-            }
-            .brand {
-              display: flex;
-              align-items: center;
-              gap: 16px;
-            }
-            .brand img {
-              width: 180px;
-              max-width: 100%;
-              height: auto;
-              display: block;
-            }
-            .meta {
-              text-align: right;
-              font-size: 12px;
-              color: #64748b;
-            }
-            .content {
-              padding: 28px;
-            }
-            .title {
-              margin: 0 0 6px;
-              font-size: 28px;
-              font-weight: 800;
-              color: #14532d;
-            }
-            .subtitle {
-              margin: 0 0 22px;
-              font-size: 14px;
-              color: #64748b;
-            }
-            .grid {
-              display: grid;
-              grid-template-columns: repeat(2, minmax(0, 1fr));
-              gap: 14px;
-              margin-bottom: 24px;
-            }
-            .card {
-              background: #f8fafc;
-              border: 1px solid #e2e8f0;
-              border-radius: 14px;
-              padding: 16px;
-            }
-            .label {
-              display: block;
-              font-size: 12px;
-              font-weight: 700;
-              color: #64748b;
-              margin-bottom: 4px;
-              text-transform: uppercase;
-              letter-spacing: 0.04em;
-            }
-            .value {
-              font-size: 15px;
-              font-weight: 700;
-              color: #0f172a;
-              word-break: break-word;
-            }
-            .obs-box {
-              margin-bottom: 22px;
-              background: #f0fdf4;
-              border: 1px solid #bbf7d0;
-              border-radius: 14px;
-              padding: 16px;
-            }
-            .obs-title {
-              margin: 0 0 8px;
-              font-size: 14px;
-              font-weight: 800;
-              color: #166534;
-            }
-            .obs-text {
-              margin: 0;
-              font-size: 14px;
-              color: #0f172a;
-              line-height: 1.6;
-              white-space: pre-wrap;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              overflow: hidden;
-              border-radius: 14px;
-              border: 1px solid #e2e8f0;
-            }
-            thead th {
-              background: #166534;
-              color: #ffffff;
-              text-align: left;
-              padding: 12px 14px;
-              font-size: 13px;
-            }
-            tbody td {
-              padding: 12px 14px;
-              border-top: 1px solid #e2e8f0;
-              font-size: 14px;
-            }
-            tbody tr:nth-child(even) {
-              background: #f8fafc;
-            }
-            .footer {
-              padding: 18px 28px 24px;
-              color: #64748b;
-              font-size: 12px;
-            }
-            @media print {
+          const productoHtml = cambioNombre
+            ? `
+              <div class="producto-original">
+                <span class="mini-label">Producto enviado por ingeniería</span>
+                <strong>${escapeHtml(originalNombre)}</strong>
+              </div>
+              <div class="producto-cambio">
+                <span class="mini-label">Cambio realizado en sucursal</span>
+                <strong>${escapeHtml(originalNombre)} &rarr; ${escapeHtml(cambioNombre)}</strong>
+                ${motivoCambio ? `<div class="motivo"><strong>Motivo:</strong> ${escapeHtml(motivoCambio)}</div>` : ""}
+              </div>
+            `
+            : `<strong>${escapeHtml(originalNombre)}</strong>`;
+
+          return `
+            <tr>
+              <td>${productoHtml}</td>
+              <td>${escapeHtml(p.dosis || "-")}</td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8" />
+            <title>Receta ${escapeHtml(receta.numero)}</title>
+            <style>
+              * { box-sizing: border-box; }
               body {
-                background: #fff;
+                margin: 0;
+                font-family: Arial, Helvetica, sans-serif;
+                color: #0f172a;
+                background: #ffffff;
               }
               .page {
-                box-shadow: none;
-                border: none;
-                margin: 0;
-                max-width: 100%;
-                border-radius: 0;
+                width: 100%;
+                max-width: 900px;
+                margin: 20px auto;
+                background: #ffffff;
+                border: 1px solid #e2e8f0;
               }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="page">
-            <div class="topbar"></div>
-            <div class="header">
-              <div class="brand">
-                <img src="${logoSurco}" alt="SURCO" />
+              .header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
+                padding: 22px 28px 16px;
+                border-bottom: 1px solid #e2e8f0;
+              }
+              .brand img {
+                width: 160px;
+                max-width: 100%;
+                height: auto;
+                display: block;
+              }
+              .meta {
+                text-align: right;
+                font-size: 12px;
+                color: #0f172a;
+              }
+              .content {
+                padding: 24px 28px 28px;
+              }
+              .title {
+                margin: 0 0 6px;
+                font-size: 28px;
+                font-weight: 800;
+                color: #14532d;
+              }
+              .subtitle {
+                margin: 0 0 18px;
+                font-size: 14px;
+                color: #475569;
+              }
+              .obs-box {
+                margin-bottom: 18px;
+                background: #f0fdf4;
+                border: 1px solid #86efac;
+                border-radius: 12px;
+                padding: 16px;
+              }
+              .obs-title {
+                margin: 0 0 10px;
+                font-size: 15px;
+                font-weight: 800;
+                color: #166534;
+              }
+              .obs-text {
+                margin: 0 0 4px;
+                font-size: 14px;
+                color: #0f172a;
+                line-height: 1.45;
+                white-space: pre-wrap;
+              }
+              .delivery-box {
+                margin-bottom: 18px;
+                background: #fff7ed;
+                border: 1px solid #fed7aa;
+                border-radius: 12px;
+                padding: 16px;
+              }
+              .delivery-title {
+                margin: 0 0 8px;
+                font-size: 15px;
+                font-weight: 800;
+                color: #9a3412;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                border: 1px solid #e2e8f0;
+              }
+              thead th {
+                background: #f8fafc;
+                color: #334155;
+                text-align: left;
+                padding: 12px 14px;
+                font-size: 13px;
+                border-bottom: 1px solid #e2e8f0;
+              }
+              tbody td {
+                padding: 14px;
+                border-top: 1px solid #e2e8f0;
+                font-size: 14px;
+                vertical-align: top;
+              }
+              tbody tr:nth-child(even) {
+                background: #f8fafc;
+              }
+              .mini-label {
+                display: block;
+                font-size: 11px;
+                font-weight: 700;
+                color: #64748b;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+                margin-bottom: 3px;
+              }
+              .producto-cambio {
+                margin-top: 10px;
+                padding: 10px 12px;
+                border-radius: 10px;
+                border: 1px solid #bfdbfe;
+                background: #eff6ff;
+                color: #1e3a8a;
+              }
+              .motivo {
+                margin-top: 6px;
+                color: #0f172a;
+              }
+              @media print {
+                body { background: #fff; }
+                .page {
+                  border: none;
+                  margin: 0;
+                  max-width: 100%;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="page">
+              <div class="header">
+                <div class="brand">
+                  <img src="${logoSurco}" alt="SURCO" />
+                </div>
+                <div class="meta">
+                  <div><strong>Receta:</strong> ${escapeHtml(receta.numero)}</div>
+                  <div><strong>Fecha:</strong> ${escapeHtml(new Date().toLocaleString())}</div>
+                </div>
               </div>
-              <div class="meta">
-                <div><strong>Receta:</strong> ${escapeHtml(receta.numero)}</div>
-                <div><strong>Fecha:</strong> ${escapeHtml(new Date().toLocaleString())}</div>
+
+              <div class="content">
+                <h1 class="title">Receta #${escapeHtml(receta.numero)}</h1>
+                <p class="subtitle">Comprobante de entrega generado desde el sistema SURCO.</p>
+
+                <div class="obs-box">
+                  <h3 class="obs-title">Datos enviados por ingeniería</h3>
+                  <p class="obs-text"><strong>Cliente:</strong> ${escapeHtml(receta.clienteNombre || "-")}</p>
+                  <p class="obs-text"><strong>Finca:</strong> ${escapeHtml(receta.fincaNombre || "-")}</p>
+                  <p class="obs-text"><strong>Ingeniero:</strong> ${escapeHtml(receta.ingenieroNombre || "-")}</p>
+                  <p class="obs-text"><strong>Sucursal:</strong> ${escapeHtml(receta.sucursalNombre || "-")}</p>
+                  <p class="obs-text"><strong>Factura:</strong> ${escapeHtml(facturaNumero || "-")}</p>
+                  <p class="obs-text"><strong>¿Para cuánto es?:</strong> ${escapeHtml(receta.paraCuantoEs || "-")}</p>
+                  <p class="obs-text"><strong>Lotes/Cultivos:</strong> ${escapeHtml(receta.lotesCultivos || "-")}</p>
+                  <p class="obs-text"><strong>Observación general:</strong> ${escapeHtml(receta.observacion || "-")}</p>
+                  <p class="obs-text"><strong>Precio aprox:</strong> ${escapeHtml(formatMoney(receta.precioTotalVenta || 0))}</p>
+                </div>
+
+                <div class="delivery-box">
+                  <h3 class="delivery-title">Observación de entrega</h3>
+                  <p class="obs-text">${escapeHtml(observacionTexto || "-")}</p>
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Dosis</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${productosHtml}
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            <div class="content">
-              <h1 class="title">Receta #${escapeHtml(receta.numero)}</h1>
-              <p class="subtitle">Comprobante de entrega generado desde el sistema SURCO.</p>
-
-              <div class="grid">
-                <div class="card">
-                  <span class="label">Cliente</span>
-                  <div class="value">${escapeHtml(receta.clienteNombre || "-")}</div>
-                </div>
-                <div class="card">
-                  <span class="label">Finca</span>
-                  <div class="value">${escapeHtml(receta.fincaNombre || "-")}</div>
-                </div>
-                <div class="card">
-                  <span class="label">Ingeniero</span>
-                  <div class="value">${escapeHtml(receta.ingenieroNombre || "-")}</div>
-                </div>
-                <div class="card">
-                  <span class="label">Sucursal</span>
-                  <div class="value">${escapeHtml(receta.sucursalNombre || "-")}</div>
-                </div>
-                <div class="card">
-                  <span class="label">Factura</span>
-                  <div class="value">${escapeHtml(facturaNumero || "-")}</div>
-                </div>
-                <div class="card">
-                  <span class="label">Estado</span>
-                  <div class="value">Entrega confirmada</div>
-                </div>
-                <div class="card">
-                  <span class="label">¿Para cuánto es?</span>
-                  <div class="value">${escapeHtml(receta.paraCuantoEs || "-")}</div>
-                </div>
-                <div class="card">
-                  <span class="label">Lotes/Cultivos</span>
-                  <div class="value">${escapeHtml(receta.lotesCultivos || "-")}</div>
-                </div>
-              </div>
-
-              <div class="obs-box">
-                <h3 class="obs-title">Datos enviados por ingeniería</h3>
-                <p class="obs-text"><strong>¿Para cuánto es?:</strong> ${escapeHtml(receta.paraCuantoEs || "-")}</p>
-                <p class="obs-text"><strong>Lotes/Cultivos:</strong> ${escapeHtml(receta.lotesCultivos || "-")}</p>
-                <p class="obs-text"><strong>Observación general:</strong> ${escapeHtml(receta.observacion || "-")}</p>
-                <p class="obs-text"><strong>Precio aprox:</strong> ${escapeHtml(formatMoney(receta.precioTotalVenta || 0))}</p>
-              </div>
-
-              <div class="obs-box" style="background:#fff7ed;border-color:#fed7aa;">
-                <h3 class="obs-title" style="color:#9a3412;">Observación de entrega</h3>
-                <p class="obs-text">${escapeHtml(observacionTexto || "-")}</p>
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Producto</th>
-                    <th>Código</th>
-                    <th>Unidad</th>
-                    <th>Cantidad</th>
-                    <th>Dosis</th>
-                    <th>Inventario al crear</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${productosHtml}
-                </tbody>
-              </table>
-            </div>
-
-            <div class="footer">
-              Documento generado automáticamente por SURCO.
-            </div>
-          </div>
-          <script>
-            window.onload = function () {
-              setTimeout(function () {
-                window.print();
-              }, 250);
-            };
-          </script>
-        </body>
-      </html>
-    `;
+            <script>
+              window.onload = function () {
+                setTimeout(function () {
+                  window.print();
+                }, 250);
+              };
+            </script>
+          </body>
+        </html>
+      `;
 
       const ventana = ventanaPdf || window.open("", "_blank", "width=1024,height=768");
       if (!ventana) {
@@ -661,7 +618,7 @@ function RecetasSucursales() {
 
       setSaving(true);
 
-      const recetaConfirmada = await confirmarEntregaReceta(recetaSeleccionada.id, {
+      await confirmarEntregaReceta(recetaSeleccionada.id, {
         factura,
         observacion,
         detalles: productosConfirmacion.map((p) => ({
@@ -680,7 +637,7 @@ function RecetasSucursales() {
       });
 
       if (imprimirReceta) {
-        imprimirRecetaPDF((recetaConfirmada || recetaSeleccionada) as Receta, factura, observacion, ventanaPdf);
+        imprimirRecetaPDF(recetaSeleccionada as Receta, factura, observacion, ventanaPdf);
       }
 
       cerrarModal();

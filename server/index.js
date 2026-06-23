@@ -599,23 +599,70 @@ function isWritableColumn(col) {
   return !col?.readOnly && !col?.hidden && !blockedNames.includes(colName);
 }
 
+function coerceFieldValueForColumn(value, column) {
+  if (value === undefined) return { include: false };
+
+  // Lookups se escriben como <Campo>LookupId y Graph espera un id numérico.
+  if (column?.lookup) {
+    if (value === null || value === "") return { include: false };
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0
+      ? { include: true, value: n }
+      : { include: false };
+  }
+
+  // Columnas numéricas: evita Graph 400 cuando mandamos strings.
+  if (column?.number || column?.currency) {
+    if (value === null || value === "") return { include: false };
+    const n = Number(String(value).replace(/,/g, "."));
+    return Number.isFinite(n) ? { include: true, value: n } : { include: false };
+  }
+
+  if (column?.boolean) {
+    if (value === null || value === "") return { include: false };
+    if (typeof value === "boolean") return { include: true, value };
+    const normalized = String(value).trim().toLowerCase();
+    return { include: true, value: ["true", "1", "si", "sí", "yes"].includes(normalized) };
+  }
+
+  if (column?.dateTime) {
+    if (value === null || value === "") return { include: true, value: null };
+    const d = new Date(value);
+    return Number.isNaN(d.getTime())
+      ? { include: false }
+      : { include: true, value: d.toISOString() };
+  }
+
+  if (column?.choice) {
+    if (value === null || value === undefined) return { include: false };
+    return { include: true, value: String(value) };
+  }
+
+  if (value === null) return { include: true, value: null };
+  return { include: true, value };
+}
+
 function sanitizeFieldsForWrite(fields, columns = []) {
   const clean = {};
-  const writableColumnNames = new Set(
-    (columns || []).filter(isWritableColumn).map((col) => col.name)
+  const writableColumnsByName = new Map(
+    (columns || []).filter(isWritableColumn).map((col) => [col.name, col])
   );
 
   for (const [key, value] of Object.entries(fields || {})) {
     if (value === undefined) continue;
 
     if (key.endsWith("LookupId")) {
-      clean[key] = value;
+      if (value === null || value === "") continue;
+      const n = Number(value);
+      if (Number.isFinite(n) && n > 0) clean[key] = n;
       continue;
     }
 
-    if (writableColumnNames.has(key)) {
-      clean[key] = value;
-    }
+    const column = writableColumnsByName.get(key);
+    if (!column) continue;
+
+    const coerced = coerceFieldValueForColumn(value, column);
+    if (coerced.include) clean[key] = coerced.value;
   }
 
   return clean;
@@ -639,12 +686,56 @@ async function updateItem(listName, itemId, fields) {
   const columns = await getListColumns(listName, false);
   const safeFields = sanitizeFieldsForWrite(fields, columns);
 
-  await graphFetch(`/sites/${siteId}/lists/${listId}/items/${itemId}/fields`, {
-    method: "PATCH",
-    body: safeFields,
-  });
+  if (!Object.keys(safeFields).length) {
+    console.warn("SP UPDATE sin campos válidos:", { listName, itemId, fields });
+    return { ok: true, skipped: true };
+  }
 
-  return { ok: true };
+  try {
+    await graphFetch(`/sites/${siteId}/lists/${listId}/items/${itemId}/fields`, {
+      method: "PATCH",
+      body: safeFields,
+    });
+    return { ok: true };
+  } catch (error) {
+    // Graph a veces responde 400 por una sola columna con tipo diferente
+    // (ej: Factura numérica enviada como texto). Para no botar toda la
+    // confirmación, reintentamos campo por campo y omitimos solo el problemático.
+    console.error("SP UPDATE PATCH completo falló, reintentando campo por campo:", {
+      listName,
+      itemId,
+      safeFields,
+      error: error?.message || error,
+    });
+
+    const applied = {};
+    const skipped = {};
+
+    for (const [key, value] of Object.entries(safeFields)) {
+      try {
+        await graphFetch(`/sites/${siteId}/lists/${listId}/items/${itemId}/fields`, {
+          method: "PATCH",
+          body: { [key]: value },
+        });
+        applied[key] = value;
+      } catch (fieldError) {
+        skipped[key] = fieldError?.message || String(fieldError);
+        console.error("SP UPDATE campo omitido por error Graph:", {
+          listName,
+          itemId,
+          key,
+          value,
+          error: skipped[key],
+        });
+      }
+    }
+
+    if (!Object.keys(applied).length) {
+      throw error;
+    }
+
+    return { ok: true, applied, skipped };
+  }
 }
 
 
