@@ -1,4 +1,4 @@
-const API_URL = "https://app-recetas-o6t4.onrender.com/api";
+const API_URL = (import.meta.env.VITE_API_URL || "https://app-recetas-o6t4.onrender.com/api").replace(/\/$/, "");
 
 function getToken(): string | null {
   return localStorage.getItem("app_token") || localStorage.getItem("token") || null;
@@ -115,6 +115,12 @@ export type ProductoSP = {
   nombre: string;
   codigo: string;
   unidad: UnidadProducto | string;
+  stock?: number;
+  disponible?: number;
+  reservada?: number;
+  precioVenta?: number;
+  origen?: "sql" | "sharepoint" | string;
+  esProductoSql?: boolean;
 };
 
 export type RecetaProducto = {
@@ -129,6 +135,14 @@ export type RecetaProducto = {
   cantidadEntregada?: number;
   porcentajeCumplimiento?: number;
   dosis?: string;
+  precioVenta?: number;
+  totalVenta?: number;
+  fueCambiado?: boolean;
+  productoOriginalNombre?: string;
+  codigoProductoOriginal?: string;
+  productoCambioNombre?: string;
+  productoCambioCodigo?: string;
+  cambioProducto?: string;
   esOtroProducto?: boolean;
   otroProductoNombre?: string;
 };
@@ -151,6 +165,9 @@ export type RecetaIngeniero = {
   finalizadaAt?: string;
   factura?: string;
   observacion?: string;
+  paraCuantoEs?: string;
+  lotesCultivos?: string;
+  precioTotalVenta?: number;
   totalProductos?: number;
   totalSolicitado?: number;
   totalEntregado?: number;
@@ -162,8 +179,13 @@ export type RecetaIngeniero = {
 export type RecetaIngenieroPayload = {
   ingenieroId: number;
   clienteId: number;
+  clienteNombre?: string;
   fincaId: number;
   sucursalId: number;
+  paraCuantoEs?: string;
+  lotesCultivos?: string;
+  observacion?: string;
+  precioTotalVenta?: number;
   productos: Array<{
     productoId?: number;
     cantidad: number;
@@ -173,6 +195,10 @@ export type RecetaIngenieroPayload = {
     productoNombre?: string;
     codigo?: string;
     unidad?: string;
+    precioVenta?: number;
+    totalVenta?: number;
+    productoSqlId?: number;
+    esProductoSql?: boolean;
   }>;
 };
 
@@ -183,6 +209,14 @@ export type ConfirmarEntregaPayload = {
     detalleId?: number;
     productoId?: number;
     cantidadEntregada: number;
+    fueCambiado?: boolean;
+    productoCambioId?: number;
+    productoCambioNombre?: string;
+    productoCambioCodigo?: string;
+    productoCambioUnidad?: string;
+    productoCambioPrecioVenta?: number;
+    motivoCambio?: string;
+    totalVenta?: number;
   }>;
 };
 
@@ -218,6 +252,14 @@ export type HistorialRecetaSP = {
     cantidadEntregada: number;
     porcentajeCumplimiento: number;
     porcentaje: number;
+    precioVenta?: number;
+    totalVenta?: number;
+    fueCambiado?: boolean;
+    productoOriginalNombre?: string;
+    codigoProductoOriginal?: string;
+    productoCambioNombre?: string;
+    productoCambioCodigo?: string;
+    cambioProducto?: string;
   }>;
 };
 

@@ -37,6 +37,11 @@ type ProductoSeleccionado = {
   productoNombre?: string;
   productoCodigo?: string;
   unidad?: string;
+  stock?: number;
+  disponible?: number;
+  reservada?: number;
+  precioVenta?: number;
+  esProductoSql?: boolean;
 };
 
 
@@ -192,6 +197,9 @@ type FormState = {
   fincaId: number;
   sucursalId: number;
   productoSearch: string;
+  paraCuantoEs: string;
+  lotesCultivos: string;
+  observacion: string;
 };
 
 const initialForm: FormState = {
@@ -200,6 +208,9 @@ const initialForm: FormState = {
   fincaId: 0,
   sucursalId: 0,
   productoSearch: "",
+  paraCuantoEs: "",
+  lotesCultivos: "",
+  observacion: "",
 };
 
 function normalizeText(value: unknown) {
@@ -230,6 +241,15 @@ function formatFecha(value?: string) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleString();
+}
+
+function formatMoney(value?: number) {
+  const n = Number(value || 0);
+  return n.toLocaleString("es-CR", {
+    style: "currency",
+    currency: "CRC",
+    maximumFractionDigits: 0,
+  });
 }
 
 function EstadoBadge({ estado }: { estado?: string }) {
@@ -361,9 +381,12 @@ export default function RecetasIngeniero() {
 
   const fincasFiltradas = useMemo(() => {
     if (!form.clienteId) return [];
-    return fincas.filter(
+    const relacionadas = fincas.filter(
       (f) => Number(f.clienteId) === Number(form.clienteId)
     );
+    // Cuando clientes vienen de SQL, el ID puede no coincidir con el lookup viejo de SharePoint.
+    // En ese caso mostramos todas las fincas para no bloquear la creación de recetas.
+    return relacionadas.length > 0 ? relacionadas : fincas;
   }, [fincas, form.clienteId]);
   const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
 
@@ -455,14 +478,6 @@ export default function RecetasIngeniero() {
     );
   }
 
-  function getCantidadSeleccionada(productoId: number) {
-    return (
-      productosSeleccionados.find(
-        (p) => !p.esOtroProducto && Number(p.productoId) === Number(productoId)
-      )?.cantidad || 1
-    );
-  }
-
   function getDosisSeleccionada(productoId: number) {
     return (
       productosSeleccionados.find(
@@ -491,15 +506,14 @@ export default function RecetasIngeniero() {
           productoNombre: producto?.nombre || "",
           productoCodigo: producto?.codigo || "",
           unidad: producto?.unidad || "",
+          stock: Number(producto?.stock || 0),
+          disponible: Number(producto?.disponible || 0),
+          reservada: Number(producto?.reservada || 0),
+          precioVenta: Number(producto?.precioVenta || 0),
+          esProductoSql: !!producto?.esProductoSql || producto?.origen === "sql",
         },
       ];
     });
-  }
-
-  function updateCantidadByKey(key: string, cantidad: number) {
-    setProductosSeleccionados((prev) =>
-      prev.map((p) => (p.key === key ? { ...p, cantidad: Math.max(1, Number(cantidad || 1)) } : p))
-    );
   }
 
   function updateDosisByKey(key: string, dosis: string) {
@@ -548,12 +562,6 @@ export default function RecetasIngeniero() {
     if (!productosSeleccionados.length)
       return "Seleccione al menos un producto";
 
-    const cantidadesInvalidas = productosSeleccionados.some(
-      (item) => Number(item.cantidad) <= 0
-    );
-
-    if (cantidadesInvalidas) return "Revise las cantidades de los productos";
-
     const otrosInvalidos = productosSeleccionados.some(
       (item) => item.esOtroProducto && !String(item.otroProductoNombre || "").trim()
     );
@@ -581,11 +589,16 @@ export default function RecetasIngeniero() {
             ? Number(user?.ingenieroId || form.ingenieroId)
             : Number(form.ingenieroId),
         clienteId: Number(form.clienteId),
+        clienteNombre: selectedClienteOption?.label || "",
         fincaId: Number(form.fincaId),
         sucursalId: Number(form.sucursalId),
+        paraCuantoEs: String(form.paraCuantoEs || "").trim(),
+        lotesCultivos: String(form.lotesCultivos || "").trim(),
+        observacion: String(form.observacion || "").trim(),
+        precioTotalVenta: precioTotalVenta,
         productos: productosSeleccionados.map((item) => ({
           productoId: item.productoId ? Number(item.productoId) : undefined,
-          cantidad: Number(item.cantidad),
+          cantidad: 1,
           dosis: String(item.dosis || "").trim(),
           esOtroProducto: !!item.esOtroProducto,
           otroProductoNombre: String(item.otroProductoNombre || "").trim(),
@@ -594,6 +607,10 @@ export default function RecetasIngeniero() {
             : String(item.productoNombre || "").trim(),
           codigo: String(item.productoCodigo || (item.esOtroProducto ? "OTRO" : "")).trim(),
           unidad: String(item.unidad || (item.esOtroProducto ? "UND" : "")).trim(),
+          precioVenta: Number(item.precioVenta || 0),
+          totalVenta: Number(item.precioVenta || 0),
+          productoSqlId: item.productoId ? Number(item.productoId) : undefined,
+          esProductoSql: !!item.esProductoSql,
         })),
       };
 
@@ -623,6 +640,11 @@ export default function RecetasIngeniero() {
       setSendingId(null);
     }
   }
+
+  const precioTotalVenta = productosSeleccionados.reduce(
+    (acc, item) => acc + Number(item.precioVenta || 0),
+    0
+  );
 
   const canSave =
     form.ingenieroId > 0 &&
@@ -844,6 +866,15 @@ export default function RecetasIngeniero() {
                         ? `Enviada el ${formatFecha(receta.fechaEnvio)}`
                         : `Creada el ${formatFecha(receta.createdAt)}`}
                     </p>
+
+                    {(receta.paraCuantoEs || receta.lotesCultivos || receta.observacion || Number(receta.precioTotalVenta || 0) > 0) && (
+                      <div style={{ marginTop: 12, color: "#334155", fontSize: 14, display: "grid", gap: 4 }}>
+                        {receta.paraCuantoEs && <div><strong>¿Para cuánto es?:</strong> {receta.paraCuantoEs}</div>}
+                        {receta.lotesCultivos && <div><strong>Lotes/Cultivos:</strong> {receta.lotesCultivos}</div>}
+                        {receta.observacion && <div><strong>Observación:</strong> {receta.observacion}</div>}
+                        {Number(receta.precioTotalVenta || 0) > 0 && <div><strong>Precio total venta:</strong> {formatMoney(Number(receta.precioTotalVenta || 0))}</div>}
+                      </div>
+                    )}
                   </div>
 
                   <div
@@ -958,8 +989,9 @@ export default function RecetasIngeniero() {
                             {p.productoCodigo ? ` (${p.productoCodigo})` : ""}
                             {p.unidad ? ` · ${p.unidad}` : ""}
                             {p.dosis ? ` · Dosis: ${p.dosis}` : ""}
+                            {p.fueCambiado && (p.cambioProducto || p.productoCambioNombre) ? ` · Cambio: ${p.cambioProducto || `${p.productoOriginalNombre || "Original"} -> ${p.productoCambioNombre}`}` : ""}
                           </span>
-                          <strong>{p.cantidad}</strong>
+                          <strong>Incluido</strong>
                         </div>
                       ))
                     )}
@@ -1324,27 +1356,14 @@ export default function RecetasIngeniero() {
                             >
                               Código: {producto.codigo || "-"} · Unidad:{" "}
                               {producto.unidad || "-"}
+                              <span style={{ marginLeft: 8, fontWeight: 800, color: Number(producto.disponible || 0) > 0 ? "#15803d" : "#b91c1c" }}>
+                                Disponible: {Number(producto.disponible ?? producto.stock ?? 0).toLocaleString("es-CR")}
+                              </span>
                             </div>
                           </div>
                         </label>
 
                         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                          <div>
-                            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>Cantidad</div>
-                            <input
-                              type="number"
-                              min={1}
-                              value={getCantidadSeleccionada(producto.id)}
-                              disabled={!activo}
-                              onChange={(e) => updateCantidadByKey(`prod-${producto.id}`, Number(e.target.value))}
-                              style={{
-                                width: 95,
-                                padding: "10px 12px",
-                                borderRadius: 10,
-                                border: "1px solid #cbd5e1",
-                              }}
-                            />
-                          </div>
                           <div>
                             <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>Dosis</div>
                             <input
@@ -1354,7 +1373,7 @@ export default function RecetasIngeniero() {
                               disabled={!activo}
                               onChange={(e) => updateDosisByKey(`prod-${producto.id}`, e.target.value)}
                               style={{
-                                width: 120,
+                                width: 160,
                                 padding: "10px 12px",
                                 borderRadius: 10,
                                 border: "1px solid #cbd5e1",
@@ -1421,7 +1440,7 @@ export default function RecetasIngeniero() {
                             borderRadius: 14,
                             padding: 14,
                             display: "grid",
-                            gridTemplateColumns: "minmax(0,1.8fr) 100px 120px 100px auto",
+                            gridTemplateColumns: "minmax(0,1.8fr) 160px 100px auto",
                             gap: 10,
                             alignItems: "end",
                           }}
@@ -1435,16 +1454,6 @@ export default function RecetasIngeniero() {
                               placeholder="Nombre del producto"
                               value={item.otroProductoNombre}
                               onChange={(e) => updateOtroProductoByKey(item.key, "otroProductoNombre", e.target.value)}
-                              style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #cbd5e1" }}
-                            />
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>Cantidad</div>
-                            <input
-                              type="number"
-                              min={1}
-                              value={item.cantidad}
-                              onChange={(e) => updateCantidadByKey(item.key, Number(e.target.value))}
                               style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #cbd5e1" }}
                             />
                           </div>
@@ -1491,6 +1500,73 @@ export default function RecetasIngeniero() {
                   {productosSeleccionados.length === 1 ? "" : "s"} seleccionado
                   {productosSeleccionados.length === 1 ? "" : "s"}
                 </div>
+
+                {productosSeleccionados.length > 0 && (
+                  <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+                    <div style={{ background: "#f8fafc", border: "1px solid #dbe2ea", borderRadius: 16, padding: 14 }}>
+                      <div style={{ fontWeight: 900, color: "#0f172a", marginBottom: 12 }}>Datos finales de la receta</div>
+                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0,1fr))", gap: 12 }}>
+                        <div>
+                          <label style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>¿Para cuánto es?</label>
+                          <input
+                            type="text"
+                            value={form.paraCuantoEs}
+                            onChange={(e) => setForm((prev) => ({ ...prev, paraCuantoEs: e.target.value }))}
+                            placeholder="Ej: estañón, tanque, 1 hectárea..."
+                            style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1" }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>Lote / Cultivo</label>
+                          <input
+                            type="text"
+                            value={form.lotesCultivos}
+                            onChange={(e) => setForm((prev) => ({ ...prev, lotesCultivos: e.target.value }))}
+                            placeholder="Ej: Lote 3, papa, cebolla..."
+                            style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1" }}
+                          />
+                        </div>
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <label style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>Observación general</label>
+                          <textarea
+                            rows={3}
+                            value={form.observacion}
+                            onChange={(e) => setForm((prev) => ({ ...prev, observacion: e.target.value }))}
+                            placeholder="Observación general de la receta..."
+                            style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1", resize: "vertical" }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {productosSeleccionados.map((item) => (
+                      <div key={item.key} style={{ background: "#f8fafc", border: "1px solid #dbe2ea", borderRadius: 14, padding: 12, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) 180px auto", gap: 10, alignItems: "end" }}>
+                        <div>
+                          <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.esOtroProducto ? item.otroProductoNombre || "Otro producto" : item.productoNombre || "Producto"}</div>
+                          <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+                            {item.productoCodigo || "-"} · {item.unidad || "-"}
+                            <span style={{ marginLeft: 8, fontWeight: 800, color: Number(item.disponible ?? item.stock ?? 0) > 0 ? "#15803d" : "#b91c1c" }}>
+                              Disponible: {Number(item.disponible ?? item.stock ?? 0).toLocaleString("es-CR")}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>Dosis</div>
+                          <input type="text" value={item.dosis} onChange={(e) => updateDosisByKey(item.key, e.target.value)} placeholder="Dosis" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #cbd5e1" }} />
+                        </div>
+                        <button type="button" onClick={() => setProductosSeleccionados((prev) => prev.filter((p) => p.key !== item.key))} style={{ border: "1px solid #fecaca", background: "#fff1f2", color: "#be123c", borderRadius: 10, padding: "10px 12px", cursor: "pointer", fontWeight: 700 }}>Quitar</button>
+                      </div>
+                    ))}
+                    <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", color: "#166534", borderRadius: 14, padding: 14, fontWeight: 900, textAlign: "right" }}>
+                      Precio aproximado total de venta: {formatMoney(precioTotalVenta)}
+                      {precioTotalVenta <= 0 && (
+                        <div style={{ marginTop: 4, fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+                          Pendiente conectar precio real en SQL. No se muestra precio unitario.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {errorForm && (

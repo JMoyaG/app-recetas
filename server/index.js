@@ -6,18 +6,28 @@ import bcrypt from "bcryptjs";
 import { fileURLToPath } from "url";
 import path from "path";
 
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Primero carga server/.env para PM2/servidor. Luego permite root .env si existe.
+dotenv.config({ path: path.join(__dirname, ".env") });
+dotenv.config();
+
 const app = express();
+const CORS_ORIGINS = String(process.env.CORS_ORIGINS || "http://localhost:5173,https://app-recetas-d7ej.vercel.app")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://app-recetas-d7ej.vercel.app",
-    ],
+    origin(origin, callback) {
+      if (!origin || CORS_ORIGINS.includes("*") || CORS_ORIGINS.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`Origen no permitido por CORS: ${origin}`));
+    },
     credentials: true,
   })
 );
@@ -45,6 +55,35 @@ const LIST_NAMES = {
   historialProducto:
     process.env.SP_LIST_HISTORIAL_PRODUCTO || "SP_HistorialRecetaProducto",
 };
+
+const USE_SQL_CATALOGS = parseBoolean(process.env.USE_SQL_CATALOGS || process.env.CATALOGOS_SQL || "false");
+const SQL_PRODUCTOS_QUERY = String(
+  process.env.SQL_PRODUCTOS_QUERY ||
+    `SELECT TOP 5000
+      idProducto AS id,
+      codigo AS codigo,
+      Producto AS nombre,
+      Unidad AS unidad,
+      Stock AS stock,
+      Disponible AS disponible,
+      Reservada AS reservada,
+      PrecioVenta AS precioVenta
+    FROM vw_AppRecetas_Productos
+    ORDER BY Producto`
+);
+const SQL_CLIENTES_QUERY = String(
+  process.env.SQL_CLIENTES_QUERY ||
+    `SELECT TOP 5000
+      idCliente AS id,
+      Nombre AS nombre,
+      Apellido AS apellido,
+      Telefono AS telefono
+    FROM vw_AppRecetas_Clientes
+    ORDER BY Nombre, Apellido`
+);
+
+let SQL_POOL = null;
+let SQL_MODULE = null;
 
 let ACCESS_TOKEN = null;
 let TOKEN_EXPIRES_AT = 0;
@@ -115,6 +154,112 @@ function firstDefined(...values) {
 function safeNumber(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function safeText(value, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function pickField(row = {}, candidates = [], fallback = "") {
+  const entries = Object.entries(row || {});
+  for (const name of candidates) {
+    const direct = row[name];
+    if (!isEmpty(direct)) return direct;
+    const wanted = norm(name);
+    const found = entries.find(([key, value]) => norm(key) === wanted && !isEmpty(value));
+    if (found) return found[1];
+  }
+  return fallback;
+}
+
+function normalizeSqlBool(value) {
+  return parseBoolean(value);
+}
+
+function normalizeSqlConfigBool(value, fallback = false) {
+  if (isEmpty(value)) return fallback;
+  return normalizeSqlBool(value);
+}
+
+async function getSqlModule() {
+  if (SQL_MODULE) return SQL_MODULE;
+  const imported = await import("mssql");
+  SQL_MODULE = imported.default || imported;
+  return SQL_MODULE;
+}
+
+function requireSqlConfig() {
+  if (!process.env.SQL_SERVER || !process.env.SQL_DATABASE || !process.env.SQL_USER || !process.env.SQL_PASSWORD) {
+    throw new Error("Faltan variables SQL_SERVER, SQL_DATABASE, SQL_USER o SQL_PASSWORD en .env");
+  }
+}
+
+async function getSqlPool() {
+  requireSqlConfig();
+  if (SQL_POOL?.connected) return SQL_POOL;
+
+  const sql = await getSqlModule();
+  SQL_POOL = await new sql.ConnectionPool({
+    server: process.env.SQL_SERVER,
+    database: process.env.SQL_DATABASE,
+    user: process.env.SQL_USER,
+    password: process.env.SQL_PASSWORD,
+    port: Number(process.env.SQL_PORT || 1433),
+    options: {
+      encrypt: normalizeSqlConfigBool(process.env.SQL_ENCRYPT, false),
+      trustServerCertificate: normalizeSqlConfigBool(process.env.SQL_TRUST_SERVER_CERTIFICATE, true),
+    },
+    pool: {
+      max: Number(process.env.SQL_POOL_MAX || 10),
+      min: Number(process.env.SQL_POOL_MIN || 0),
+      idleTimeoutMillis: Number(process.env.SQL_POOL_IDLE_MS || 30000),
+    },
+    requestTimeout: Number(process.env.SQL_REQUEST_TIMEOUT_MS || 60000),
+  }).connect();
+
+  return SQL_POOL;
+}
+
+async function querySqlCatalog(sqlText) {
+  const pool = await getSqlPool();
+  const result = await pool.request().query(sqlText);
+  return Array.isArray(result?.recordset) ? result.recordset : [];
+}
+
+function mapSqlCliente(row, index = 0) {
+  const id = safeNumber(pickField(row, ["id", "idCliente", "IdCliente", "IDCLIENTE", "CodigoCliente", "codigoCliente"]), index + 1);
+  const nombre = safeText(pickField(row, ["nombre", "Nombre", "Cliente", "NombreCliente", "RazonSocial", "Razon Social", "Razón Social"]));
+  const apellido = safeText(pickField(row, ["apellido", "Apellido", "Apellidos"]));
+  const telefono = safeText(pickField(row, ["telefono", "Telefono", "Teléfono", "Celular"]));
+
+  return {
+    id,
+    nombre,
+    apellido,
+    telefono,
+    origen: "sql",
+  };
+}
+
+function mapSqlProducto(row, index = 0) {
+  const id = safeNumber(pickField(row, ["id", "idProducto", "IdProducto", "IDPRODUCTO", "productoId"]), index + 1);
+  const codigo = safeText(pickField(row, ["codigo", "Codigo", "Código", "CodigoProducto", "CódigoProducto", "CodProducto"]));
+  const nombre = safeText(pickField(row, ["nombre", "Nombre", "Producto", "DescripLarga", "Descripcion", "Descripción"]));
+  const unidad = safeText(pickField(row, ["unidad", "Unidad", "UnidadMedida", "Unidad de Medida", "Medida"]), "UND");
+
+  return {
+    id,
+    nombre,
+    codigo,
+    unidad,
+    stock: safeNumber(pickField(row, ["stock", "Stock", "Inventario", "Existencia"]), 0),
+    disponible: safeNumber(pickField(row, ["disponible", "Disponible"]), 0),
+    reservada: safeNumber(pickField(row, ["reservada", "Reservada", "Reserva"]), 0),
+    precioVenta: safeNumber(pickField(row, ["precioVenta", "PrecioVenta", "Precio Venta", "Precio", "PrecioPublico", "Precio Público"]), 0),
+    origen: "sql",
+    esProductoSql: true,
+  };
 }
 
 function parseBoolean(value) {
@@ -852,6 +997,12 @@ function mapProductoFromFields(item) {
     nombre,
     codigo,
     unidad,
+    stock: safeNumber(getFieldValue(f, ["Stock", "Inventario", "Existencia"]), 0),
+    disponible: safeNumber(getFieldValue(f, ["Disponible"]), 0),
+    reservada: safeNumber(getFieldValue(f, ["Reservada", "Reserva"]), 0),
+    precioVenta: safeNumber(getFieldValue(f, ["PrecioVenta", "Precio Venta", "Precio", "PrecioPublico", "Precio Público"]), 0),
+    origen: "sharepoint",
+    esProductoSql: false,
   };
 }
 
@@ -1095,12 +1246,17 @@ function buildRecetaIngenieroFields(payload, columns) {
     ingenieroKey,
   });
 
-  if (!clienteKey) throw new Error("No encontré el campo lookup Cliente en SP_Receta Ingeniero");
+  if (!clienteKey && !USE_SQL_CATALOGS) throw new Error("No encontré el campo lookup Cliente en SP_Receta Ingeniero");
   if (!fincaKey) throw new Error("No encontré el campo lookup Finca en SP_Receta Ingeniero");
   if (!sucursalKey) throw new Error("No encontré el campo lookup Sucursal en SP_Receta Ingeniero");
   if (!ingenieroKey) throw new Error("No encontré el campo lookup Ingeniero en SP_Receta Ingeniero");
 
-  fields[clienteKey] = Number(payload.clienteId);
+  if (clienteKey && !USE_SQL_CATALOGS) {
+    fields[clienteKey] = Number(payload.clienteId);
+  } else {
+    setIfExists(fields, resolveWriteName(columns, ["ClienteSqlId", "Cliente SQL Id", "IdClienteSql", "Id Cliente SQL"]), Number(payload.clienteId || 0));
+    setIfExists(fields, resolveWriteName(columns, ["ClienteNombre", "Cliente Nombre", "Cliente"]), String(payload.clienteNombre || payload.nombreCliente || ""));
+  }
   fields[fincaKey] = Number(payload.fincaId);
   fields[sucursalKey] = Number(payload.sucursalId);
   fields[ingenieroKey] = Number(payload.ingenieroId);
@@ -1116,7 +1272,10 @@ function buildRecetaIngenieroFields(payload, columns) {
   setIfExists(fields, resolveWriteName(columns, ["TotalEntregado"]), 0);
   setIfExists(fields, resolveWriteName(columns, ["PorcentajeCumplimiento", "Porcentaje Cumplimiento"]), 0);
   setIfExists(fields, resolveWriteName(columns, ["ProductosCompletos"]), 0);
-  setIfExists(fields, resolveWriteName(columns, ["Observacion", "Observación"]), "");
+  setIfExists(fields, resolveWriteName(columns, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]), String(payload.paraCuantoEs || ""));
+  setIfExists(fields, resolveWriteName(columns, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]), String(payload.lotesCultivos || ""));
+  setIfExists(fields, resolveWriteName(columns, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), safeNumber(payload.precioTotalVenta, 0));
+  setIfExists(fields, resolveWriteName(columns, ["Observacion", "Observación"]), String(payload.observacion || ""));
 
   console.log("FIELDS RECETA INGENIERO A ENVIAR:", fields);
   return fields;
@@ -1155,22 +1314,44 @@ function buildRecetaProductoFields(payload, columns) {
 
   fields[recetaKey] = Number(payload.recetaIngenieroId);
 
-  if (!esOtroProducto) {
+  const esProductoSql = !!payload.esProductoSql || USE_SQL_CATALOGS;
+
+  if (!esOtroProducto && !esProductoSql) {
     if (!productoKey) {
       throw new Error("No encontré el campo lookup Producto en SP_Receta Producto");
     }
     fields[productoKey] = Number(payload.productoId);
   }
 
-  setIfExists(fields, resolveWriteName(columns, ["ProductoNombre", "Producto Nombre"]), payload.productoNombre || "");
-  setIfExists(fields, resolveWriteName(columns, ["CodigoProducto", "Codigo Producto", "CódigoProducto"]), payload.codigo || payload.codigoProducto || (esOtroProducto ? "OTRO" : ""));
-  setIfExists(fields, resolveWriteName(columns, ["Unidad"]), payload.unidad || "");
+  const productoNombreFinal = payload.productoCambioNombre || payload.productoNombre || "";
+  const codigoFinal = payload.codigoCambio || payload.productoCambioCodigo || payload.codigo || payload.codigoProducto || (esOtroProducto ? "OTRO" : "");
+  const unidadFinal = payload.unidadCambio || payload.productoCambioUnidad || payload.unidad || "";
+
+  setIfExists(fields, resolveWriteName(columns, ["ProductoNombre", "Producto Nombre"]), productoNombreFinal);
+  setIfExists(fields, resolveWriteName(columns, ["CodigoProducto", "Codigo Producto", "CódigoProducto"]), codigoFinal);
+  setIfExists(fields, resolveWriteName(columns, ["Unidad"]), unidadFinal);
+  setIfExists(fields, resolveWriteName(columns, ["ProductoSqlId", "Producto SQL Id", "IdProductoSql", "Id Producto SQL"]), safeNumber(payload.productoSqlId ?? payload.productoId, 0));
   setIfExists(fields, resolveWriteName(columns, ["CantidadRecetada", "Cantidad Recetada"]), safeNumber(payload.cantidadRecetada ?? payload.cantidad, 0));
   setIfExists(fields, resolveWriteName(columns, ["CantidadEntregada", "Cantidad Entregada"]), safeNumber(payload.cantidadEntregada, 0));
   setIfExists(fields, resolveWriteName(columns, ["PorcentajeCumplimiento", "Porcentaje Cumplimiento"]), safeNumber(payload.porcentajeCumplimiento, 0));
   setIfExists(fields, resolveWriteName(columns, ["Dosis"]), String(payload.dosis || ""));
   setIfExists(fields, resolveWriteName(columns, ["EsOtroProducto", "Es Otro Producto"]), esOtroProducto);
   setIfExists(fields, resolveWriteName(columns, ["OtroProductoNombre", "Otro Producto Nombre"]), String(payload.otroProductoNombre || ""));
+  setIfExists(fields, resolveWriteName(columns, ["PrecioVenta", "Precio Venta"]), safeNumber(payload.precioVenta, 0));
+  setIfExists(fields, resolveWriteName(columns, ["TotalVenta", "Total Venta"]), safeNumber(payload.totalVenta, 0));
+
+  const fueCambiado = !!payload.fueCambiado || !!payload.productoCambioNombre;
+  const cambioTexto = fueCambiado
+    ? `${String(payload.productoOriginalNombre || payload.productoNombre || "Producto original").trim()} -> ${String(payload.productoCambioNombre || productoNombreFinal || "Producto nuevo").trim()}`
+    : "";
+
+  setIfExists(fields, resolveWriteName(columns, ["FueCambiado", "Fue Cambiado", "ProductoCambiado"]), fueCambiado);
+  setIfExists(fields, resolveWriteName(columns, ["ProductoOriginalNombre", "Producto Original Nombre", "ProductoOriginal"]), String(payload.productoOriginalNombre || ""));
+  setIfExists(fields, resolveWriteName(columns, ["CodigoProductoOriginal", "Codigo Producto Original", "Código Producto Original"]), String(payload.codigoProductoOriginal || ""));
+  setIfExists(fields, resolveWriteName(columns, ["ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]), String(payload.productoCambioNombre || ""));
+  setIfExists(fields, resolveWriteName(columns, ["CodigoProductoCambio", "Codigo Producto Cambio", "Código Producto Cambio"]), String(payload.productoCambioCodigo || payload.codigoCambio || ""));
+  setIfExists(fields, resolveWriteName(columns, ["CambioProducto", "Cambio Producto", "Cambio"]), cambioTexto);
+  setIfExists(fields, resolveWriteName(columns, ["MotivoCambio", "Motivo Cambio"]), String(payload.motivoCambio || ""));
 
   return fields;
 }
@@ -1213,6 +1394,9 @@ function buildHistorialFields(payload, columns) {
   setIfExists(fields, resolveWriteName(columns, ["FechaConfirmacion"]), payload.fechaConfirmacion || nowIso());
   setIfExists(fields, resolveWriteName(columns, ["Factura"]), String(payload.factura || ""));
   setIfExists(fields, resolveWriteName(columns, ["Observacion", "Observación"]), String(payload.observacion || ""));
+  setIfExists(fields, resolveWriteName(columns, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]), String(payload.paraCuantoEs || ""));
+  setIfExists(fields, resolveWriteName(columns, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]), String(payload.lotesCultivos || ""));
+  setIfExists(fields, resolveWriteName(columns, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), safeNumber(payload.precioTotalVenta, 0));
   setIfExists(fields, resolveWriteName(columns, ["TotalProductos"]), safeNumber(payload.totalProductos));
   setIfExists(fields, resolveWriteName(columns, ["TotalSolicitado"]), safeNumber(payload.totalSolicitado));
   setIfExists(fields, resolveWriteName(columns, ["TotalEntregado"]), safeNumber(payload.totalEntregado));
@@ -1244,17 +1428,37 @@ function buildHistorialProductoFields(payload, columns) {
   setIfExists(fields, resolveWriteName(columns, ["Dosis"]), String(payload.dosis || ""));
   setIfExists(fields, resolveWriteName(columns, ["EsOtroProducto", "Es Otro Producto"]), !!payload.esOtroProducto);
   setIfExists(fields, resolveWriteName(columns, ["OtroProductoNombre", "Otro Producto Nombre"]), String(payload.otroProductoNombre || ""));
+  setIfExists(fields, resolveWriteName(columns, ["PrecioVenta", "Precio Venta"]), safeNumber(payload.precioVenta, 0));
+  setIfExists(fields, resolveWriteName(columns, ["TotalVenta", "Total Venta"]), safeNumber(payload.totalVenta, 0));
+  setIfExists(fields, resolveWriteName(columns, ["FueCambiado", "Fue Cambiado", "ProductoCambiado"]), !!payload.fueCambiado);
+  setIfExists(fields, resolveWriteName(columns, ["ProductoOriginalNombre", "Producto Original Nombre", "ProductoOriginal"]), String(payload.productoOriginalNombre || ""));
+  setIfExists(fields, resolveWriteName(columns, ["CodigoProductoOriginal", "Codigo Producto Original", "Código Producto Original"]), String(payload.codigoProductoOriginal || ""));
+  setIfExists(fields, resolveWriteName(columns, ["ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]), String(payload.productoCambioNombre || ""));
+  setIfExists(fields, resolveWriteName(columns, ["CodigoProductoCambio", "Codigo Producto Cambio", "Código Producto Cambio"]), String(payload.productoCambioCodigo || ""));
+  setIfExists(fields, resolveWriteName(columns, ["CambioProducto", "Cambio Producto", "Cambio"]), String(payload.cambioProducto || ""));
   return fields;
 }
 
 async function getClientesData({ forceRefresh = false } = {}) {
-  const cacheKey = "clientes:all";
+  const cacheKey = USE_SQL_CATALOGS ? "clientes:sql" : "clientes:all";
   if (!forceRefresh) {
     const cached = getCache(cacheKey);
     if (cached) return cached;
   }
 
   const started = Date.now();
+
+  if (USE_SQL_CATALOGS) {
+    const rows = await querySqlCatalog(SQL_CLIENTES_QUERY);
+    const clientes = rows
+      .map(mapSqlCliente)
+      .filter((x) => String(x.nombre || "").trim() !== "")
+      .sort((a, b) => String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", { sensitivity: "base" }));
+
+    console.log(`CLIENTES SQL cargados: ${clientes.length} en ${Date.now() - started}ms`);
+    return setCache(cacheKey, clientes, Number(process.env.SQL_CATALOG_CACHE_TTL_MS || CACHE_TTL_MS));
+  }
+
   const items = await listItems(LIST_NAMES.clientes);
 
   // OJO: antes este GET también intentaba actualizar Title en SharePoint.
@@ -1285,10 +1489,25 @@ async function getSucursalesData() {
   return items.map(mapSucursalFromFields);
 }
 
-async function getProductosData() {
+async function getProductosData({ forceRefresh = false } = {}) {
+  const cacheKey = USE_SQL_CATALOGS ? "productos:sql" : "productos:sharepoint";
+  if (!forceRefresh) {
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+  }
+
+  if (USE_SQL_CATALOGS) {
+    const rows = await querySqlCatalog(SQL_PRODUCTOS_QUERY);
+    const productos = rows
+      .map(mapSqlProducto)
+      .filter((x) => String(x.nombre || x.codigo || "").trim() !== "")
+      .sort((a, b) => String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", { sensitivity: "base" }));
+    return setCache(cacheKey, productos, Number(process.env.SQL_CATALOG_CACHE_TTL_MS || CACHE_TTL_MS));
+  }
+
   const items = await listItems(LIST_NAMES.productos);
   await ensureTitlesForItems(LIST_NAMES.productos, items, ["ProductoNombre", "NombreProducto", "Nombre Producto", "Nombre_x0020_Producto", "Title"]);
-  return items.map(mapProductoFromFields);
+  return setCache(cacheKey, items.map(mapProductoFromFields));
 }
 
 async function getFincasData() {
@@ -1330,16 +1549,27 @@ async function getRecipeDetailsItems() {
 
 function mapRecetaProductoFromFields(item, productosMap = new Map()) {
   const f = item.fields || {};
-  const productoId = getLookupIdValue(f, ["Producto", "ProductoId"]);
-  const producto = productosMap.get(productoId);
+  const productoLookupId = getLookupIdValue(f, ["Producto", "ProductoId"]);
+  const productoSqlId = safeNumber(getFieldValue(f, ["ProductoSqlId", "Producto SQL Id", "IdProductoSql", "Id Producto SQL"]), 0);
+  const producto = productosMap.get(productoLookupId || productoSqlId);
   return {
     id: Number(item.id),
     detalleId: Number(item.id),
     recetaIngenieroId: getLookupIdValue(f, ["RecetaIngeniero", "Receta Ingeniero", "Receta", "RecetaId"]),
-    productoId,
+    productoId: productoLookupId || productoSqlId,
+    productoLookupId,
+    productoSqlId,
     esOtroProducto: parseBoolean(getFieldValue(f, ["EsOtroProducto", "Es Otro Producto"])),
     otroProductoNombre: String(getFieldValue(f, ["OtroProductoNombre", "Otro Producto Nombre"]) || "").trim(),
     dosis: String(getFieldValue(f, ["Dosis"]) || "").trim(),
+    precioVenta: safeNumber(getFieldValue(f, ["PrecioVenta", "Precio Venta"]), 0),
+    totalVenta: safeNumber(getFieldValue(f, ["TotalVenta", "Total Venta"]), 0),
+    fueCambiado: parseBoolean(getFieldValue(f, ["FueCambiado", "Fue Cambiado", "ProductoCambiado"])),
+    productoOriginalNombre: String(getFieldValue(f, ["ProductoOriginalNombre", "Producto Original Nombre", "ProductoOriginal"]) || "").trim(),
+    codigoProductoOriginal: String(getFieldValue(f, ["CodigoProductoOriginal", "Codigo Producto Original", "Código Producto Original"]) || "").trim(),
+    productoCambioNombre: String(getFieldValue(f, ["ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]) || "").trim(),
+    productoCambioCodigo: String(getFieldValue(f, ["CodigoProductoCambio", "Codigo Producto Cambio", "Código Producto Cambio"]) || "").trim(),
+    cambioProducto: String(getFieldValue(f, ["CambioProducto", "Cambio Producto", "Cambio"]) || "").trim(),
     productoNombre:
       String(getFieldValue(f, ["ProductoNombre", "Producto Nombre"]) || "").trim() ||
       String(getFieldValue(f, ["OtroProductoNombre", "Otro Producto Nombre"]) || "").trim() ||
@@ -1364,7 +1594,7 @@ function mapRecetaProductoFromFields(item, productosMap = new Map()) {
 function mapRecetaIngenieroFromFields(item, context, detalleMap = new Map()) {
   const f = item.fields || {};
   const id = Number(item.id);
-  const clienteId = getLookupIdValue(f, ["Cliente", "Clientes", "ClienteId"]);
+  const clienteId = getLookupIdValue(f, ["Cliente", "Clientes", "ClienteId"]) || safeNumber(getFieldValue(f, ["ClienteSqlId", "Cliente SQL Id", "IdClienteSql", "Id Cliente SQL"]), 0);
   const fincaId = getLookupIdValue(f, ["Finca", "FincaId"]);
   const sucursalId = getLookupIdValue(f, ["Sucursal", "SucursalId"]);
   const ingenieroId = getLookupIdValue(f, ["Ingeniero", "IngenieroId"]);
@@ -1404,6 +1634,7 @@ function mapRecetaIngenieroFromFields(item, context, detalleMap = new Map()) {
     ingenieroId,
     sucursalId,
     clienteNombre:
+      String(getFieldValue(f, ["ClienteNombre", "Cliente Nombre"]) || "").trim() ||
       (cliente ? `${cliente.nombre} ${cliente.apellido || ""}`.trim() : "") ||
       getLookupTextValue(f, ["Cliente", "Clientes", "ClienteId"]) ||
       String(getFieldValue(f, ["Cliente", "Clientes", "ClienteId"]) || "").trim(),
@@ -1424,6 +1655,9 @@ function mapRecetaIngenieroFromFields(item, context, detalleMap = new Map()) {
     fechaConfirmacion,
     factura: String(getFieldValue(f, ["Factura"]) || ""),
     observacion: String(getFieldValue(f, ["Observacion", "Observación"]) || ""),
+    paraCuantoEs: String(getFieldValue(f, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]) || ""),
+    lotesCultivos: String(getFieldValue(f, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]) || ""),
+    precioTotalVenta: safeNumber(getFieldValue(f, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), 0),
     totalProductos: safeNumber(getFieldValue(f, ["TotalProductos"]), 0),
     totalSolicitado: safeNumber(getFieldValue(f, ["TotalSolicitado"]), 0),
     totalEntregado: safeNumber(getFieldValue(f, ["TotalEntregado"]), 0),
@@ -1518,6 +1752,9 @@ async function syncHistorialFromReceta(recetaId) {
     fechaConfirmacion: receta.fechaConfirmacion,
     factura: receta.factura,
     observacion: receta.observacion,
+    paraCuantoEs: receta.paraCuantoEs,
+    lotesCultivos: receta.lotesCultivos,
+    precioTotalVenta: receta.precioTotalVenta,
     totalProductos: receta.totalProductos || receta.productos.length,
     totalSolicitado: receta.totalSolicitado,
     totalEntregado: receta.totalEntregado,
@@ -1642,6 +1879,23 @@ async function getHistorialData() {
     }))
     .sort((a, b) => b.id - a.id);
 }
+
+app.get("/api/health", async (_req, res) => {
+  res.json({ ok: true, service: "app-recetas-api", sqlCatalogos: USE_SQL_CATALOGS, time: nowIso() });
+});
+
+app.get("/api/catalogos/status", async (_req, res) => {
+  const status = { sqlCatalogos: USE_SQL_CATALOGS, sql: "no_configurado" };
+  if (USE_SQL_CATALOGS) {
+    try {
+      await getSqlPool();
+      status.sql = "conectado";
+    } catch (error) {
+      status.sql = `error: ${error?.message || error}`;
+    }
+  }
+  res.json(status);
+});
 
 app.post("/api/auth/login", async (req, res) => {
   try {
@@ -1919,9 +2173,9 @@ app.delete("/api/sucursales/:id", authMiddleware, async (req, res) => {
   }
 });
 
-app.get("/api/productos", authMiddleware, async (_req, res) => {
+app.get("/api/productos", authMiddleware, async (req, res) => {
   try {
-    res.json(await getProductosData());
+    res.json(await getProductosData({ forceRefresh: String(req.query.refresh || "") === "1" }));
   } catch (error) {
     console.error("ERROR GET PRODUCTOS:", error);
     res.status(500).json({ error: error.message || "No se pudieron obtener productos" });
@@ -2174,6 +2428,10 @@ app.post("/api/recetas/ingeniero", authMiddleware, async (req, res) => {
         cantidadEntregada: 0,
         porcentajeCumplimiento: 0,
         dosis: String(item.dosis || "").trim(),
+        precioVenta: safeNumber(item.precioVenta, safeNumber(producto?.precioVenta, 0)),
+        totalVenta: round2(safeNumber(item.totalVenta, safeNumber(item.cantidad, 0) * safeNumber(item.precioVenta, safeNumber(producto?.precioVenta, 0)))),
+        productoSqlId: safeNumber(item.productoSqlId ?? item.productoId, 0),
+        esProductoSql: !!item.esProductoSql || USE_SQL_CATALOGS,
         esOtroProducto,
         otroProductoNombre: esOtroProducto
           ? String(item.otroProductoNombre || "").trim()
@@ -2336,14 +2594,26 @@ app.post("/api/recetas/sucursal/:id/confirmar", authMiddleware, async (req, res)
     for (const x of Array.isArray(detalles) ? detalles : []) {
       const detalleId = Number(x?.detalleId);
       const productoId = Number(x?.productoId);
-      const cantidadEntregada = safeNumber(x?.cantidadEntregada);
+      const confirmacion = {
+        detalleId,
+        productoId,
+        cantidadEntregada: safeNumber(x?.cantidadEntregada),
+        productoCambioId: safeNumber(x?.productoCambioId, 0),
+        productoCambioNombre: safeText(x?.productoCambioNombre),
+        productoCambioCodigo: safeText(x?.productoCambioCodigo),
+        productoCambioUnidad: safeText(x?.productoCambioUnidad),
+        productoCambioPrecioVenta: safeNumber(x?.productoCambioPrecioVenta, 0),
+        fueCambiado: !!x?.fueCambiado || !!x?.productoCambioNombre || safeNumber(x?.productoCambioId, 0) > 0,
+        motivoCambio: safeText(x?.motivoCambio),
+        totalVenta: safeNumber(x?.totalVenta, 0),
+      };
 
       if (Number.isFinite(detalleId) && detalleId > 0) {
-        detallesPorDetalleId.set(detalleId, cantidadEntregada);
+        detallesPorDetalleId.set(detalleId, confirmacion);
       }
 
       if (Number.isFinite(productoId) && productoId > 0) {
-        detallesPorProductoId.set(productoId, cantidadEntregada);
+        detallesPorProductoId.set(productoId, confirmacion);
       }
     }
 
@@ -2361,21 +2631,25 @@ app.post("/api/recetas/sucursal/:id/confirmar", authMiddleware, async (req, res)
     let totalSolicitado = 0;
     let totalEntregado = 0;
     let productosCompletos = 0;
+    let precioTotalVentaFinal = 0;
 
     for (const item of recetaDetalleItems) {
       const mapped = mapRecetaProductoFromFields(item, context.productosMap);
 
       const solicitada = safeNumber(mapped.cantidad, 0);
 
+      let confirmacion = null;
       let entregadaCruda = safeNumber(mapped.cantidadEntregada, 0);
 
       const itemDetalleId = Number(item.id);
       const mappedProductoId = Number(mapped.productoId);
 
       if (detallesPorDetalleId.has(itemDetalleId)) {
-        entregadaCruda = detallesPorDetalleId.get(itemDetalleId);
+        confirmacion = detallesPorDetalleId.get(itemDetalleId);
+        entregadaCruda = confirmacion?.cantidadEntregada;
       } else if (detallesPorProductoId.has(mappedProductoId)) {
-        entregadaCruda = detallesPorProductoId.get(mappedProductoId);
+        confirmacion = detallesPorProductoId.get(mappedProductoId);
+        entregadaCruda = confirmacion?.cantidadEntregada;
       }
 
       const entregada = Math.min(
@@ -2383,12 +2657,24 @@ app.post("/api/recetas/sucursal/:id/confirmar", authMiddleware, async (req, res)
         solicitada
       );
 
-      const porcentaje = calcPercent(entregada, solicitada);
+      const fueCambiado = !!confirmacion?.fueCambiado;
+      // Si la sucursal cambia el producto por otro, el producto recetado original
+      // no cuenta como cumplido para la efectividad. La venta sí se conserva aparte.
+      const entregadaParaEfectividad = fueCambiado ? 0 : entregada;
+      const porcentaje = calcPercent(entregadaParaEfectividad, solicitada);
+      const precioVentaFinal = fueCambiado
+        ? safeNumber(confirmacion?.productoCambioPrecioVenta, 0)
+        : safeNumber(mapped.precioVenta, 0);
+      const totalVentaConfirmado = safeNumber(confirmacion?.totalVenta, 0);
+      const totalVentaDetalle = round2(
+        totalVentaConfirmado > 0 ? totalVentaConfirmado : entregada * precioVentaFinal
+      );
 
       totalSolicitado += solicitada;
-      totalEntregado += entregada;
+      totalEntregado += entregadaParaEfectividad;
+      precioTotalVentaFinal += totalVentaDetalle;
 
-      if (entregada >= solicitada && solicitada > 0) {
+      if (!fueCambiado && entregada >= solicitada && solicitada > 0) {
         productosCompletos += 1;
       }
 
@@ -2398,7 +2684,8 @@ app.post("/api/recetas/sucursal/:id/confirmar", authMiddleware, async (req, res)
         buildRecetaProductoFields(
           {
             recetaIngenieroId: recetaId,
-            productoId: mapped.productoId,
+            productoId: fueCambiado ? confirmacion?.productoCambioId : mapped.productoId,
+            productoSqlId: fueCambiado ? confirmacion?.productoCambioId : mapped.productoSqlId || mapped.productoId,
             productoNombre: mapped.productoNombre,
             codigo: mapped.productoCodigo,
             unidad: mapped.unidad,
@@ -2406,8 +2693,18 @@ app.post("/api/recetas/sucursal/:id/confirmar", authMiddleware, async (req, res)
             cantidadEntregada: entregada,
             porcentajeCumplimiento: porcentaje,
             dosis: mapped.dosis || "",
+            precioVenta: precioVentaFinal,
+            totalVenta: totalVentaDetalle,
+            esProductoSql: USE_SQL_CATALOGS || !!mapped.productoSqlId,
             esOtroProducto: !!mapped.esOtroProducto,
             otroProductoNombre: mapped.otroProductoNombre || "",
+            fueCambiado,
+            productoOriginalNombre: fueCambiado ? mapped.productoNombre : mapped.productoOriginalNombre || "",
+            codigoProductoOriginal: fueCambiado ? mapped.productoCodigo : mapped.codigoProductoOriginal || "",
+            productoCambioNombre: fueCambiado ? confirmacion?.productoCambioNombre : "",
+            productoCambioCodigo: fueCambiado ? confirmacion?.productoCambioCodigo : "",
+            productoCambioUnidad: fueCambiado ? confirmacion?.productoCambioUnidad : "",
+            motivoCambio: confirmacion?.motivoCambio || "",
           },
           detalleColumns
         )
@@ -2424,6 +2721,7 @@ app.post("/api/recetas/sucursal/:id/confirmar", authMiddleware, async (req, res)
     setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["Observacion", "Observación"]), String(observacion || ""));
     setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["TotalSolicitado"]), totalSolicitado);
     setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["TotalEntregado"]), totalEntregado);
+    setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), round2(precioTotalVentaFinal || receta.precioTotalVenta || 0));
     setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["TotalProductos"]), recetaDetalleItems.length);
     setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["ProductosCompletos"]), productosCompletos);
     setIfExists(

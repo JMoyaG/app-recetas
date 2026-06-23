@@ -12,7 +12,9 @@ import {
 } from "lucide-react";
 import {
   confirmarEntregaReceta,
+  getProductos,
   getRecetasPendientesSucursal,
+  type ProductoSP,
 } from "../Services/sharepoint";
 import logoSurco from "../assets/logo-surco.png";
 
@@ -25,6 +27,14 @@ type RecetaProducto = {
   cantidad: number;
   cantidadEntregada?: number;
   dosis?: string;
+  precioVenta?: number;
+  totalVenta?: number;
+  fueCambiado?: boolean;
+  productoOriginalNombre?: string;
+  codigoProductoOriginal?: string;
+  productoCambioNombre?: string;
+  productoCambioCodigo?: string;
+  cambioProducto?: string;
 };
 
 type Receta = {
@@ -37,6 +47,10 @@ type Receta = {
   sucursalNombre?: string;
   createdAt?: string;
   fechaEnvio?: string;
+  paraCuantoEs?: string;
+  lotesCultivos?: string;
+  observacion?: string;
+  precioTotalVenta?: number;
   productos?: RecetaProducto[];
 };
 
@@ -45,6 +59,13 @@ type ProductoConfirmacion = {
   productoId: number;
   entregadoCompleto: boolean;
   cantidadEntregada: number;
+  fueCambiado?: boolean;
+  productoCambioId?: number;
+  productoCambioNombre?: string;
+  productoCambioCodigo?: string;
+  productoCambioUnidad?: string;
+  productoCambioPrecioVenta?: number;
+  motivoCambio?: string;
 };
 
 function normalizeText(value: unknown) {
@@ -62,6 +83,15 @@ function formatFecha(fecha?: string) {
   return date.toLocaleString();
 }
 
+function formatMoney(value?: number) {
+  const n = Number(value || 0);
+  return n.toLocaleString("es-CR", {
+    style: "currency",
+    currency: "CRC",
+    maximumFractionDigits: 0,
+  });
+}
+
 function escapeHtml(value: unknown) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -76,6 +106,7 @@ function RecetasSucursales() {
   const [saving, setSaving] = useState(false);
 
   const [recetas, setRecetas] = useState<Receta[]>([]);
+  const [productosCatalogo, setProductosCatalogo] = useState<ProductoSP[]>([]);
   const [search, setSearch] = useState("");
   const [expandedIds, setExpandedIds] = useState<number[]>([]);
 
@@ -101,8 +132,19 @@ function RecetasSucursales() {
     }
   }
 
+  async function loadProductosCatalogo() {
+    try {
+      const data = await getProductos();
+      setProductosCatalogo(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error cargando productos para cambio:", error);
+      setProductosCatalogo([]);
+    }
+  }
+
   useEffect(() => {
     loadRecetas();
+    loadProductosCatalogo();
   }, []);
 
   const recetasFiltradas = useMemo(() => {
@@ -139,6 +181,13 @@ function RecetasSucursales() {
         productoId: Number(p.productoId),
         entregadoCompleto: true,
         cantidadEntregada: Number(p.cantidad || 0),
+        fueCambiado: false,
+        productoCambioId: 0,
+        productoCambioNombre: "",
+        productoCambioCodigo: "",
+        productoCambioUnidad: "",
+        productoCambioPrecioVenta: 0,
+        motivoCambio: "",
       }))
     );
     setModalOpen(true);
@@ -159,6 +208,57 @@ function RecetasSucursales() {
         (detalleId && p.detalleId ? Number(p.detalleId) === Number(detalleId) : false) ||
         Number(p.productoId) === Number(productoId)
     );
+  }
+
+  function updateProductoConfirmacion(
+    productoId: number,
+    detalleId: number | undefined,
+    updater: (item: ProductoConfirmacion) => ProductoConfirmacion
+  ) {
+    setProductosConfirmacion((prev) =>
+      prev.map((p) => {
+        const same =
+          (detalleId && p.detalleId ? Number(p.detalleId) === Number(detalleId) : false) ||
+          Number(p.productoId) === Number(productoId);
+        return same ? updater(p) : p;
+      })
+    );
+  }
+
+  function toggleCambioProducto(producto: RecetaProducto, checked: boolean) {
+    updateProductoConfirmacion(producto.productoId, producto.detalleId, (item) => ({
+      ...item,
+      fueCambiado: checked,
+      // Si la sucursal cambia el producto, el producto recetado original NO cuenta como cumplido.
+      entregadoCompleto: checked ? false : item.entregadoCompleto,
+      cantidadEntregada: checked ? 0 : item.cantidadEntregada,
+      productoCambioId: checked ? item.productoCambioId || 0 : 0,
+      productoCambioNombre: checked ? item.productoCambioNombre || "" : "",
+      productoCambioCodigo: checked ? item.productoCambioCodigo || "" : "",
+      productoCambioUnidad: checked ? item.productoCambioUnidad || "" : "",
+      productoCambioPrecioVenta: checked ? item.productoCambioPrecioVenta || 0 : 0,
+      motivoCambio: checked ? item.motivoCambio || "" : "",
+    }));
+  }
+
+  function cambiarProductoCambio(producto: RecetaProducto, productoCambioId: number) {
+    const nuevo = productosCatalogo.find((p) => Number(p.id) === Number(productoCambioId));
+    updateProductoConfirmacion(producto.productoId, producto.detalleId, (item) => ({
+      ...item,
+      fueCambiado: Number(productoCambioId) > 0,
+      productoCambioId: Number(productoCambioId || 0),
+      productoCambioNombre: nuevo?.nombre || "",
+      productoCambioCodigo: nuevo?.codigo || "",
+      productoCambioUnidad: String(nuevo?.unidad || ""),
+      productoCambioPrecioVenta: Number(nuevo?.precioVenta || 0),
+    }));
+  }
+
+  function cambiarMotivoCambio(producto: RecetaProducto, motivoCambio: string) {
+    updateProductoConfirmacion(producto.productoId, producto.detalleId, (item) => ({
+      ...item,
+      motivoCambio,
+    }));
   }
 
   function toggleProductoCompleto(
@@ -207,18 +307,26 @@ function RecetasSucursales() {
     const productos = Array.isArray(receta.productos) ? receta.productos : [];
 
     const productosHtml = productos
-      .map(
-        (p, index) => `
+      .map((p, index) => {
+        const estado = getEstadoProducto(p.productoId, p.detalleId);
+        const productoTexto = estado?.fueCambiado && estado.productoCambioNombre
+          ? `${p.productoNombre || "-"} -> ${estado.productoCambioNombre}`
+          : p.productoNombre || "-";
+        const codigoTexto = estado?.fueCambiado && estado.productoCambioCodigo
+          ? `${p.productoCodigo || "-"} -> ${estado.productoCambioCodigo}`
+          : p.productoCodigo || "-";
+        const cantidadTexto = `${Number(estado?.cantidadEntregada ?? p.cantidad ?? 0)} de ${Number(p.cantidad || 0)}`;
+        return `
           <tr>
             <td>${index + 1}</td>
-            <td>${escapeHtml(p.productoNombre || "-")}</td>
-            <td>${escapeHtml(p.productoCodigo || "-")}</td>
-            <td>${escapeHtml(p.unidad || "-")}</td>
-            <td>${escapeHtml(p.cantidad || 0)}</td>
+            <td>${escapeHtml(productoTexto)}</td>
+            <td>${escapeHtml(codigoTexto)}</td>
+            <td>${escapeHtml(estado?.productoCambioUnidad || p.unidad || "-")}</td>
+            <td>${escapeHtml(cantidadTexto)}</td>
             <td>${escapeHtml(p.dosis || "-")}</td>
           </tr>
-        `
-      )
+        `;
+      })
       .join("");
 
     const html = `
@@ -417,6 +525,14 @@ function RecetasSucursales() {
                   <span class="label">Estado</span>
                   <div class="value">Entrega confirmada</div>
                 </div>
+                <div class="card">
+                  <span class="label">¿Para cuánto es?</span>
+                  <div class="value">${escapeHtml(receta.paraCuantoEs || "-")}</div>
+                </div>
+                <div class="card">
+                  <span class="label">Lotes/Cultivos</span>
+                  <div class="value">${escapeHtml(receta.lotesCultivos || "-")}</div>
+                </div>
               </div>
 
               <div class="obs-box">
@@ -493,6 +609,14 @@ function RecetasSucursales() {
           detalleId: p.detalleId,
           productoId: Number(p.productoId || 0),
           cantidadEntregada: Number(p.cantidadEntregada || 0),
+          fueCambiado: !!p.fueCambiado,
+          productoCambioId: Number(p.productoCambioId || 0),
+          productoCambioNombre: String(p.productoCambioNombre || ""),
+          productoCambioCodigo: String(p.productoCambioCodigo || ""),
+          productoCambioUnidad: String(p.productoCambioUnidad || ""),
+          productoCambioPrecioVenta: Number(p.productoCambioPrecioVenta || 0),
+          motivoCambio: String(p.motivoCambio || ""),
+          totalVenta: Number(p.cantidadEntregada || 0) * Number(p.productoCambioPrecioVenta || 0),
         })),
       });
 
@@ -703,9 +827,24 @@ function RecetasSucursales() {
                         <p style={{ margin: "0 0 8px" }}>
                           <strong>Cliente:</strong> {receta.clienteNombre || "-"}
                         </p>
-                        <p style={{ margin: 0 }}>
+                        <p style={{ margin: "0 0 8px" }}>
                           <strong>Finca:</strong> {receta.fincaNombre || "-"}
                         </p>
+                        {!!String(receta.paraCuantoEs || "").trim() && (
+                          <p style={{ margin: "0 0 8px" }}>
+                            <strong>¿Para cuánto es?:</strong> {receta.paraCuantoEs}
+                          </p>
+                        )}
+                        {!!String(receta.lotesCultivos || "").trim() && (
+                          <p style={{ margin: "0 0 8px" }}>
+                            <strong>Lotes/Cultivos:</strong> {receta.lotesCultivos}
+                          </p>
+                        )}
+                        {Number(receta.precioTotalVenta || 0) > 0 && (
+                          <p style={{ margin: 0 }}>
+                            <strong>Precio total venta:</strong> {formatMoney(receta.precioTotalVenta)}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -806,7 +945,9 @@ function RecetasSucursales() {
                         >
                           <div>
                             <div style={{ fontWeight: 700, color: "#0f172a" }}>
-                              {p.productoNombre || "Producto"}
+                              {p.fueCambiado && (p.cambioProducto || p.productoCambioNombre)
+                                ? p.cambioProducto || `${p.productoOriginalNombre || p.productoNombre || "Original"} -> ${p.productoCambioNombre}`
+                                : p.productoNombre || "Producto"}
                               {p.productoCodigo ? ` (${p.productoCodigo})` : ""}
                               {p.unidad ? ` - ${p.unidad}` : ""}
                             </div>
@@ -909,9 +1050,24 @@ function RecetasSucursales() {
                   <p style={{ margin: "0 0 10px" }}>
                     <strong>Cliente:</strong> {recetaSeleccionada.clienteNombre || "-"}
                   </p>
-                  <p style={{ margin: 0 }}>
+                  <p style={{ margin: "0 0 10px" }}>
                     <strong>Finca:</strong> {recetaSeleccionada.fincaNombre || "-"}
                   </p>
+                  {!!String(recetaSeleccionada.paraCuantoEs || "").trim() && (
+                    <p style={{ margin: "0 0 10px" }}>
+                      <strong>¿Para cuánto es?:</strong> {recetaSeleccionada.paraCuantoEs}
+                    </p>
+                  )}
+                  {!!String(recetaSeleccionada.lotesCultivos || "").trim() && (
+                    <p style={{ margin: "0 0 10px" }}>
+                      <strong>Lotes/Cultivos:</strong> {recetaSeleccionada.lotesCultivos}
+                    </p>
+                  )}
+                  {Number(recetaSeleccionada.precioTotalVenta || 0) > 0 && (
+                    <p style={{ margin: 0 }}>
+                      <strong>Precio total venta:</strong> {formatMoney(recetaSeleccionada.precioTotalVenta)}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -976,7 +1132,7 @@ function RecetasSucursales() {
 
                           <div style={{ marginTop: 10, color: "#475569", fontSize: 14 }}>
                             <div>
-                              <strong>Cantidad recetada:</strong> {producto.cantidad} {producto.unidad || ""}
+                              <strong>Producto recetado:</strong> {producto.unidad || "-"}
                             </div>
                             {!!String(producto.dosis || "").trim() && (
                               <div style={{ marginTop: 4 }}>
@@ -1036,6 +1192,48 @@ function RecetasSucursales() {
                           />
                         </div>
                       )}
+
+                      <div style={{ marginTop: 14, borderTop: "1px solid #dbe2ea", paddingTop: 14 }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 700, cursor: "pointer", color: "#0f172a" }}>
+                          <input
+                            type="checkbox"
+                            checked={!!estado?.fueCambiado}
+                            onChange={(e) => toggleCambioProducto(producto, e.target.checked)}
+                          />
+                          Cambiar este producto por otro
+                        </label>
+
+                        {!!estado?.fueCambiado && (
+                          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                            <select
+                              value={Number(estado?.productoCambioId || 0)}
+                              onChange={(e) => cambiarProductoCambio(producto, Number(e.target.value || 0))}
+                              style={{ width: "100%", borderRadius: 12, border: "1px solid #d9e2ec", padding: "12px 14px", fontSize: 15 }}
+                            >
+                              <option value={0}>Seleccione producto nuevo...</option>
+                              {productosCatalogo.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.nombre} {p.codigo ? `(${p.codigo})` : ""} {typeof p.disponible !== "undefined" ? `- Disp: ${Number(p.disponible || 0).toLocaleString("es-CR")}` : ""}
+                                </option>
+                              ))}
+                            </select>
+
+                            {estado.productoCambioNombre && (
+                              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1e3a8a", borderRadius: 12, padding: 12, fontWeight: 700 }}>
+                                Cambia: {producto.productoNombre || "Producto original"} → {estado.productoCambioNombre}
+                              </div>
+                            )}
+
+                            <input
+                              type="text"
+                              value={estado.motivoCambio || ""}
+                              onChange={(e) => cambiarMotivoCambio(producto, e.target.value)}
+                              placeholder="Motivo del cambio u observación del producto..."
+                              style={{ width: "100%", borderRadius: 12, border: "1px solid #d9e2ec", padding: "12px 14px", fontSize: 15 }}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

@@ -49,7 +49,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function login(usuario: string, password: string) {
     try {
-      const res = await fetch("https://app-recetas-o6t4.onrender.com/api/auth/login", {
+      const API_URL = (import.meta.env.VITE_API_URL || "https://app-recetas-o6t4.onrender.com/api").replace(/\/$/, "");
+      const res = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

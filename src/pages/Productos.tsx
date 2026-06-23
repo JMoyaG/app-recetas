@@ -263,6 +263,12 @@ export default function Productos() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
                     <span className="code-tag">{item.codigo}</span>
                     <span className={`pill ${getUnitClass(item.unidad)}`}>{item.unidad}</span>
+                    {typeof item.disponible !== "undefined" && (
+                      <span className="code-tag">Disp: {Number(item.disponible || 0).toLocaleString("es-CR")}</span>
+                    )}
+                    {typeof item.stock !== "undefined" && (
+                      <span className="code-tag">Stock: {Number(item.stock || 0).toLocaleString("es-CR")}</span>
+                    )}
                   </div>
                 </div>
               </div>

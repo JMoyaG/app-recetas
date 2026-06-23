@@ -96,8 +96,8 @@ function Clientes() {
     try {
       setSaving(true);
 
-      if (!form.nombre || !form.apellido || !form.telefono) {
-        throw new Error("Completá todos los campos");
+      if (!form.nombre) {
+        throw new Error("Completá al menos el nombre del cliente");
       }
 
       if (modo === "crear") {
@@ -228,7 +228,7 @@ function Clientes() {
                   <div className="client-name">
                     {cliente.nombre} {cliente.apellido}
                   </div>
-                  <div className="client-phone">{cliente.telefono || "-"}</div>
+                  {cliente.telefono && <div className="client-phone">{cliente.telefono}</div>}
                 </div>
               </div>
 
