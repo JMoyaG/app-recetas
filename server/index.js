@@ -870,6 +870,72 @@ function setIfExists(fields, key, value) {
   fields[key] = value;
 }
 
+const APP_META_MARKER = "\n\n---APP_RECETAS_META---\n";
+
+function cleanMetaObject(meta = {}) {
+  const out = {};
+  for (const [key, value] of Object.entries(meta || {})) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === "string" && value.trim() === "") continue;
+    if (typeof value === "number" && !Number.isFinite(value)) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+function encodeAppMeta(meta = {}) {
+  const clean = cleanMetaObject(meta);
+  if (!Object.keys(clean).length) return "";
+  try {
+    return `${APP_META_MARKER}${JSON.stringify(clean)}`;
+  } catch {
+    return "";
+  }
+}
+
+function parseAppMeta(text = "") {
+  const value = String(text ?? "");
+  const idx = value.indexOf(APP_META_MARKER);
+  if (idx < 0) return {};
+  const raw = value.slice(idx + APP_META_MARKER.length).trim();
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function stripAppMeta(text = "") {
+  const value = String(text ?? "");
+  const idx = value.indexOf(APP_META_MARKER);
+  return (idx >= 0 ? value.slice(0, idx) : value).trim();
+}
+
+function withAppMeta(text = "", meta = {}) {
+  const base = stripAppMeta(text);
+  const current = parseAppMeta(text);
+  const encoded = encodeAppMeta({ ...current, ...cleanMetaObject(meta) });
+  return `${base}${encoded}`;
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function firstNumber(...values) {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n !== 0) return n;
+  }
+  return 0;
+}
+
 function getEntityDisplayName(fields = {}, candidates = [], fallbackCandidates = ["Title"]) {
   return String(firstDefined(getFieldValue(fields, candidates), getFieldValue(fields, fallbackCandidates)) || "").trim();
 }
@@ -1272,10 +1338,18 @@ function buildRecetaIngenieroFields(payload, columns) {
   setIfExists(fields, resolveWriteName(columns, ["TotalEntregado"]), 0);
   setIfExists(fields, resolveWriteName(columns, ["PorcentajeCumplimiento", "Porcentaje Cumplimiento"]), 0);
   setIfExists(fields, resolveWriteName(columns, ["ProductosCompletos"]), 0);
-  setIfExists(fields, resolveWriteName(columns, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]), String(payload.paraCuantoEs || ""));
-  setIfExists(fields, resolveWriteName(columns, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]), String(payload.lotesCultivos || ""));
-  setIfExists(fields, resolveWriteName(columns, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), safeNumber(payload.precioTotalVenta, 0));
-  setIfExists(fields, resolveWriteName(columns, ["Observacion", "Observación"]), String(payload.observacion || ""));
+  const recetaMeta = {
+    paraCuantoEs: String(payload.paraCuantoEs || ""),
+    lotesCultivos: String(payload.lotesCultivos || ""),
+    precioTotalVenta: safeNumber(payload.precioTotalVenta, 0),
+    observacionGeneral: String(payload.observacion || ""),
+  };
+
+  setIfExists(fields, resolveWriteName(columns, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]), recetaMeta.paraCuantoEs);
+  setIfExists(fields, resolveWriteName(columns, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]), recetaMeta.lotesCultivos);
+  setIfExists(fields, resolveWriteName(columns, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), recetaMeta.precioTotalVenta);
+  // Fallback: si SharePoint no tiene columnas nuevas, dejamos la metadata dentro de Observación.
+  setIfExists(fields, resolveWriteName(columns, ["Observacion", "Observación"]), withAppMeta(String(payload.observacion || ""), recetaMeta));
 
   console.log("FIELDS RECETA INGENIERO A ENVIAR:", fields);
   return fields;
@@ -1329,16 +1403,38 @@ function buildRecetaProductoFields(payload, columns) {
 
   setIfExists(fields, resolveWriteName(columns, ["ProductoNombre", "Producto Nombre"]), productoNombreFinal);
   setIfExists(fields, resolveWriteName(columns, ["CodigoProducto", "Codigo Producto", "CódigoProducto"]), codigoFinal);
+  const productoMeta = {
+    inventarioMomento: safeNumber(payload.inventarioMomento ?? payload.disponibleMomento ?? payload.disponible ?? payload.stockMomento ?? payload.stock, 0),
+    disponibleMomento: safeNumber(payload.disponibleMomento ?? payload.disponible ?? payload.inventarioMomento, 0),
+    stockMomento: safeNumber(payload.stockMomento ?? payload.stock, 0),
+    reservadaMomento: safeNumber(payload.reservadaMomento ?? payload.reservada, 0),
+    precioVenta: safeNumber(payload.precioVenta, 0),
+    totalVenta: safeNumber(payload.totalVenta, 0),
+    productoSqlId: safeNumber(payload.productoSqlId ?? payload.productoId, 0),
+    fueCambiado: !!payload.fueCambiado || !!payload.productoCambioNombre,
+    productoOriginalNombre: String(payload.productoOriginalNombre || ""),
+    codigoProductoOriginal: String(payload.codigoProductoOriginal || ""),
+    productoCambioNombre: String(payload.productoCambioNombre || ""),
+    productoCambioCodigo: String(payload.productoCambioCodigo || payload.codigoCambio || ""),
+    productoCambioUnidad: String(payload.productoCambioUnidad || payload.unidadCambio || ""),
+    motivoCambio: String(payload.motivoCambio || ""),
+  };
+
   setIfExists(fields, resolveWriteName(columns, ["Unidad"]), unidadFinal);
-  setIfExists(fields, resolveWriteName(columns, ["ProductoSqlId", "Producto SQL Id", "IdProductoSql", "Id Producto SQL"]), safeNumber(payload.productoSqlId ?? payload.productoId, 0));
+  setIfExists(fields, resolveWriteName(columns, ["ProductoSqlId", "Producto SQL Id", "IdProductoSql", "Id Producto SQL"]), productoMeta.productoSqlId);
   setIfExists(fields, resolveWriteName(columns, ["CantidadRecetada", "Cantidad Recetada"]), safeNumber(payload.cantidadRecetada ?? payload.cantidad, 0));
   setIfExists(fields, resolveWriteName(columns, ["CantidadEntregada", "Cantidad Entregada"]), safeNumber(payload.cantidadEntregada, 0));
   setIfExists(fields, resolveWriteName(columns, ["PorcentajeCumplimiento", "Porcentaje Cumplimiento"]), safeNumber(payload.porcentajeCumplimiento, 0));
-  setIfExists(fields, resolveWriteName(columns, ["Dosis"]), String(payload.dosis || ""));
+  // Fallback: si SharePoint no tiene columnas nuevas de inventario/precio/cambio,
+  // la guardamos dentro de Dosis sin mostrarla luego en pantalla.
+  setIfExists(fields, resolveWriteName(columns, ["Dosis"]), withAppMeta(String(payload.dosis || ""), productoMeta));
+  setIfExists(fields, resolveWriteName(columns, ["InventarioMomento", "Inventario Momento", "DisponibleMomento", "Disponible Momento", "Inventario"]), productoMeta.inventarioMomento);
+  setIfExists(fields, resolveWriteName(columns, ["StockMomento", "Stock Momento", "Stock"]), productoMeta.stockMomento);
+  setIfExists(fields, resolveWriteName(columns, ["ReservadaMomento", "Reservada Momento", "Reservada"]), productoMeta.reservadaMomento);
   setIfExists(fields, resolveWriteName(columns, ["EsOtroProducto", "Es Otro Producto"]), esOtroProducto);
   setIfExists(fields, resolveWriteName(columns, ["OtroProductoNombre", "Otro Producto Nombre"]), String(payload.otroProductoNombre || ""));
-  setIfExists(fields, resolveWriteName(columns, ["PrecioVenta", "Precio Venta"]), safeNumber(payload.precioVenta, 0));
-  setIfExists(fields, resolveWriteName(columns, ["TotalVenta", "Total Venta"]), safeNumber(payload.totalVenta, 0));
+  setIfExists(fields, resolveWriteName(columns, ["PrecioVenta", "Precio Venta"]), productoMeta.precioVenta);
+  setIfExists(fields, resolveWriteName(columns, ["TotalVenta", "Total Venta"]), productoMeta.totalVenta);
 
   const fueCambiado = !!payload.fueCambiado || !!payload.productoCambioNombre;
   const cambioTexto = fueCambiado
@@ -1392,11 +1488,20 @@ function buildHistorialFields(payload, columns) {
   setIfExists(fields, resolveWriteName(columns, ["FechaCreacion", "Fecha Creación"]), payload.fechaCreacion || nowIso());
   setIfExists(fields, resolveWriteName(columns, ["FechaEnvio"]), payload.fechaEnvio || nowIso());
   setIfExists(fields, resolveWriteName(columns, ["FechaConfirmacion"]), payload.fechaConfirmacion || nowIso());
+  const historialMeta = {
+    paraCuantoEs: String(payload.paraCuantoEs || ""),
+    lotesCultivos: String(payload.lotesCultivos || ""),
+    precioTotalVenta: safeNumber(payload.precioTotalVenta, 0),
+    observacionGeneral: String(payload.observacion || ""),
+    observacionEntrega: String(payload.observacionEntrega || ""),
+  };
+
   setIfExists(fields, resolveWriteName(columns, ["Factura"]), String(payload.factura || ""));
-  setIfExists(fields, resolveWriteName(columns, ["Observacion", "Observación"]), String(payload.observacion || ""));
-  setIfExists(fields, resolveWriteName(columns, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]), String(payload.paraCuantoEs || ""));
-  setIfExists(fields, resolveWriteName(columns, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]), String(payload.lotesCultivos || ""));
-  setIfExists(fields, resolveWriteName(columns, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), safeNumber(payload.precioTotalVenta, 0));
+  setIfExists(fields, resolveWriteName(columns, ["Observacion", "Observación"]), withAppMeta(String(payload.observacion || ""), historialMeta));
+  setIfExists(fields, resolveWriteName(columns, ["ObservacionEntrega", "Observación Entrega", "ObservacionSucursal", "Observación Sucursal"]), String(payload.observacionEntrega || ""));
+  setIfExists(fields, resolveWriteName(columns, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]), historialMeta.paraCuantoEs);
+  setIfExists(fields, resolveWriteName(columns, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]), historialMeta.lotesCultivos);
+  setIfExists(fields, resolveWriteName(columns, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), historialMeta.precioTotalVenta);
   setIfExists(fields, resolveWriteName(columns, ["TotalProductos"]), safeNumber(payload.totalProductos));
   setIfExists(fields, resolveWriteName(columns, ["TotalSolicitado"]), safeNumber(payload.totalSolicitado));
   setIfExists(fields, resolveWriteName(columns, ["TotalEntregado"]), safeNumber(payload.totalEntregado));
@@ -1424,18 +1529,37 @@ function buildHistorialProductoFields(payload, columns) {
   setIfExists(fields, resolveWriteName(columns, ["Unidad"]), String(payload.unidad || ""));
   setIfExists(fields, resolveWriteName(columns, ["CantidadRecetada", "Cantidad Recetada"]), safeNumber(payload.cantidadRecetada));
   setIfExists(fields, resolveWriteName(columns, ["CantidadEntregada"]), safeNumber(payload.cantidadEntregada));
+  const historialProductoMeta = {
+    inventarioMomento: safeNumber(payload.inventarioMomento ?? payload.disponibleMomento, 0),
+    disponibleMomento: safeNumber(payload.disponibleMomento ?? payload.inventarioMomento, 0),
+    stockMomento: safeNumber(payload.stockMomento, 0),
+    reservadaMomento: safeNumber(payload.reservadaMomento, 0),
+    precioVenta: safeNumber(payload.precioVenta, 0),
+    totalVenta: safeNumber(payload.totalVenta, 0),
+    fueCambiado: !!payload.fueCambiado,
+    productoOriginalNombre: String(payload.productoOriginalNombre || ""),
+    codigoProductoOriginal: String(payload.codigoProductoOriginal || ""),
+    productoCambioNombre: String(payload.productoCambioNombre || ""),
+    productoCambioCodigo: String(payload.productoCambioCodigo || ""),
+    productoCambioUnidad: String(payload.productoCambioUnidad || ""),
+    cambioProducto: String(payload.cambioProducto || ""),
+    motivoCambio: String(payload.motivoCambio || ""),
+  };
+
   setIfExists(fields, resolveWriteName(columns, ["PorcentajeCumplimiento", "Porcentaje Cumplimiento"]), safeNumber(payload.porcentajeCumplimiento));
-  setIfExists(fields, resolveWriteName(columns, ["Dosis"]), String(payload.dosis || ""));
+  setIfExists(fields, resolveWriteName(columns, ["Dosis"]), withAppMeta(String(payload.dosis || ""), historialProductoMeta));
+  setIfExists(fields, resolveWriteName(columns, ["InventarioMomento", "Inventario Momento", "DisponibleMomento", "Disponible Momento", "Inventario"]), historialProductoMeta.inventarioMomento);
   setIfExists(fields, resolveWriteName(columns, ["EsOtroProducto", "Es Otro Producto"]), !!payload.esOtroProducto);
   setIfExists(fields, resolveWriteName(columns, ["OtroProductoNombre", "Otro Producto Nombre"]), String(payload.otroProductoNombre || ""));
-  setIfExists(fields, resolveWriteName(columns, ["PrecioVenta", "Precio Venta"]), safeNumber(payload.precioVenta, 0));
-  setIfExists(fields, resolveWriteName(columns, ["TotalVenta", "Total Venta"]), safeNumber(payload.totalVenta, 0));
-  setIfExists(fields, resolveWriteName(columns, ["FueCambiado", "Fue Cambiado", "ProductoCambiado"]), !!payload.fueCambiado);
-  setIfExists(fields, resolveWriteName(columns, ["ProductoOriginalNombre", "Producto Original Nombre", "ProductoOriginal"]), String(payload.productoOriginalNombre || ""));
-  setIfExists(fields, resolveWriteName(columns, ["CodigoProductoOriginal", "Codigo Producto Original", "Código Producto Original"]), String(payload.codigoProductoOriginal || ""));
-  setIfExists(fields, resolveWriteName(columns, ["ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]), String(payload.productoCambioNombre || ""));
-  setIfExists(fields, resolveWriteName(columns, ["CodigoProductoCambio", "Codigo Producto Cambio", "Código Producto Cambio"]), String(payload.productoCambioCodigo || ""));
-  setIfExists(fields, resolveWriteName(columns, ["CambioProducto", "Cambio Producto", "Cambio"]), String(payload.cambioProducto || ""));
+  setIfExists(fields, resolveWriteName(columns, ["PrecioVenta", "Precio Venta"]), historialProductoMeta.precioVenta);
+  setIfExists(fields, resolveWriteName(columns, ["TotalVenta", "Total Venta"]), historialProductoMeta.totalVenta);
+  setIfExists(fields, resolveWriteName(columns, ["FueCambiado", "Fue Cambiado", "ProductoCambiado"]), historialProductoMeta.fueCambiado);
+  setIfExists(fields, resolveWriteName(columns, ["ProductoOriginalNombre", "Producto Original Nombre", "ProductoOriginal"]), historialProductoMeta.productoOriginalNombre);
+  setIfExists(fields, resolveWriteName(columns, ["CodigoProductoOriginal", "Codigo Producto Original", "Código Producto Original"]), historialProductoMeta.codigoProductoOriginal);
+  setIfExists(fields, resolveWriteName(columns, ["ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]), historialProductoMeta.productoCambioNombre);
+  setIfExists(fields, resolveWriteName(columns, ["CodigoProductoCambio", "Codigo Producto Cambio", "Código Producto Cambio"]), historialProductoMeta.productoCambioCodigo);
+  setIfExists(fields, resolveWriteName(columns, ["CambioProducto", "Cambio Producto", "Cambio"]), historialProductoMeta.cambioProducto);
+  setIfExists(fields, resolveWriteName(columns, ["MotivoCambio", "Motivo Cambio"]), historialProductoMeta.motivoCambio);
   return fields;
 }
 
@@ -1549,9 +1673,26 @@ async function getRecipeDetailsItems() {
 
 function mapRecetaProductoFromFields(item, productosMap = new Map()) {
   const f = item.fields || {};
+  const rawDosis = String(getFieldValue(f, ["Dosis"]) || "");
+  const meta = parseAppMeta(rawDosis);
   const productoLookupId = getLookupIdValue(f, ["Producto", "ProductoId"]);
-  const productoSqlId = safeNumber(getFieldValue(f, ["ProductoSqlId", "Producto SQL Id", "IdProductoSql", "Id Producto SQL"]), 0);
+  const productoSqlId = firstNumber(
+    getFieldValue(f, ["ProductoSqlId", "Producto SQL Id", "IdProductoSql", "Id Producto SQL"]),
+    meta.productoSqlId,
+    0
+  );
   const producto = productosMap.get(productoLookupId || productoSqlId);
+  const fueCambiado = parseBoolean(getFieldValue(f, ["FueCambiado", "Fue Cambiado", "ProductoCambiado"])) || !!meta.fueCambiado;
+  const productoCambioNombre = firstText(getFieldValue(f, ["ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]), meta.productoCambioNombre);
+  const productoOriginalNombre = firstText(getFieldValue(f, ["ProductoOriginalNombre", "Producto Original Nombre", "ProductoOriginal"]), meta.productoOriginalNombre);
+  const cambioProducto = firstText(
+    getFieldValue(f, ["CambioProducto", "Cambio Producto", "Cambio"]),
+    meta.cambioProducto,
+    fueCambiado && productoCambioNombre
+      ? `${productoOriginalNombre || String(getFieldValue(f, ["ProductoNombre", "Producto Nombre"]) || "Producto original").trim()} -> ${productoCambioNombre}`
+      : ""
+  );
+
   return {
     id: Number(item.id),
     detalleId: Number(item.id),
@@ -1561,15 +1702,21 @@ function mapRecetaProductoFromFields(item, productosMap = new Map()) {
     productoSqlId,
     esOtroProducto: parseBoolean(getFieldValue(f, ["EsOtroProducto", "Es Otro Producto"])),
     otroProductoNombre: String(getFieldValue(f, ["OtroProductoNombre", "Otro Producto Nombre"]) || "").trim(),
-    dosis: String(getFieldValue(f, ["Dosis"]) || "").trim(),
-    precioVenta: safeNumber(getFieldValue(f, ["PrecioVenta", "Precio Venta"]), 0),
-    totalVenta: safeNumber(getFieldValue(f, ["TotalVenta", "Total Venta"]), 0),
-    fueCambiado: parseBoolean(getFieldValue(f, ["FueCambiado", "Fue Cambiado", "ProductoCambiado"])),
-    productoOriginalNombre: String(getFieldValue(f, ["ProductoOriginalNombre", "Producto Original Nombre", "ProductoOriginal"]) || "").trim(),
-    codigoProductoOriginal: String(getFieldValue(f, ["CodigoProductoOriginal", "Codigo Producto Original", "Código Producto Original"]) || "").trim(),
-    productoCambioNombre: String(getFieldValue(f, ["ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]) || "").trim(),
-    productoCambioCodigo: String(getFieldValue(f, ["CodigoProductoCambio", "Codigo Producto Cambio", "Código Producto Cambio"]) || "").trim(),
-    cambioProducto: String(getFieldValue(f, ["CambioProducto", "Cambio Producto", "Cambio"]) || "").trim(),
+    dosis: stripAppMeta(rawDosis),
+    precioVenta: firstNumber(getFieldValue(f, ["PrecioVenta", "Precio Venta"]), meta.precioVenta, 0),
+    totalVenta: firstNumber(getFieldValue(f, ["TotalVenta", "Total Venta"]), meta.totalVenta, 0),
+    inventarioMomento: firstNumber(getFieldValue(f, ["InventarioMomento", "Inventario Momento", "DisponibleMomento", "Disponible Momento", "Inventario"]), meta.inventarioMomento, meta.disponibleMomento, 0),
+    disponibleMomento: firstNumber(getFieldValue(f, ["DisponibleMomento", "Disponible Momento", "Disponible", "InventarioMomento", "Inventario Momento"]), meta.disponibleMomento, meta.inventarioMomento, 0),
+    stockMomento: firstNumber(getFieldValue(f, ["StockMomento", "Stock Momento", "Stock"]), meta.stockMomento, 0),
+    reservadaMomento: firstNumber(getFieldValue(f, ["ReservadaMomento", "Reservada Momento", "Reservada"]), meta.reservadaMomento, 0),
+    fueCambiado,
+    productoOriginalNombre,
+    codigoProductoOriginal: firstText(getFieldValue(f, ["CodigoProductoOriginal", "Codigo Producto Original", "Código Producto Original"]), meta.codigoProductoOriginal),
+    productoCambioNombre,
+    productoCambioCodigo: firstText(getFieldValue(f, ["CodigoProductoCambio", "Codigo Producto Cambio", "Código Producto Cambio"]), meta.productoCambioCodigo),
+    productoCambioUnidad: firstText(meta.productoCambioUnidad),
+    cambioProducto,
+    motivoCambio: firstText(getFieldValue(f, ["MotivoCambio", "Motivo Cambio"]), meta.motivoCambio),
     productoNombre:
       String(getFieldValue(f, ["ProductoNombre", "Producto Nombre"]) || "").trim() ||
       String(getFieldValue(f, ["OtroProductoNombre", "Otro Producto Nombre"]) || "").trim() ||
@@ -1625,6 +1772,10 @@ function mapRecetaIngenieroFromFields(item, context, detalleMap = new Map()) {
     ? "Pendiente de Confirmar"
     : "Pendiente";
 
+  const rawObservacion = String(getFieldValue(f, ["Observacion", "Observación"]) || "");
+  const recetaMeta = parseAppMeta(rawObservacion);
+  const observacionEntrega = firstText(getFieldValue(f, ["ObservacionEntrega", "Observación Entrega", "ObservacionSucursal", "Observación Sucursal"]), recetaMeta.observacionEntrega);
+
   return {
     id,
     numero: String(getFieldValue(f, ["NumeroReceta", "Numero Receta", "LinkTitle", "Title"]) || item.id),
@@ -1654,10 +1805,11 @@ function mapRecetaIngenieroFromFields(item, context, detalleMap = new Map()) {
     fechaEnvio,
     fechaConfirmacion,
     factura: String(getFieldValue(f, ["Factura"]) || ""),
-    observacion: String(getFieldValue(f, ["Observacion", "Observación"]) || ""),
-    paraCuantoEs: String(getFieldValue(f, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]) || ""),
-    lotesCultivos: String(getFieldValue(f, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]) || ""),
-    precioTotalVenta: safeNumber(getFieldValue(f, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), 0),
+    observacion: firstText(stripAppMeta(rawObservacion), recetaMeta.observacionGeneral),
+    observacionEntrega,
+    paraCuantoEs: firstText(getFieldValue(f, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]), recetaMeta.paraCuantoEs),
+    lotesCultivos: firstText(getFieldValue(f, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]), recetaMeta.lotesCultivos),
+    precioTotalVenta: firstNumber(getFieldValue(f, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), recetaMeta.precioTotalVenta, 0),
     totalProductos: safeNumber(getFieldValue(f, ["TotalProductos"]), 0),
     totalSolicitado: safeNumber(getFieldValue(f, ["TotalSolicitado"]), 0),
     totalEntregado: safeNumber(getFieldValue(f, ["TotalEntregado"]), 0),
@@ -1752,6 +1904,7 @@ async function syncHistorialFromReceta(recetaId) {
     fechaConfirmacion: receta.fechaConfirmacion,
     factura: receta.factura,
     observacion: receta.observacion,
+    observacionEntrega: receta.observacionEntrega,
     paraCuantoEs: receta.paraCuantoEs,
     lotesCultivos: receta.lotesCultivos,
     precioTotalVenta: receta.precioTotalVenta,
@@ -1785,6 +1938,20 @@ async function syncHistorialFromReceta(recetaId) {
           producto.cantidad
         ),
         dosis: producto.dosis || "",
+        precioVenta: producto.precioVenta || 0,
+        totalVenta: producto.totalVenta || 0,
+        inventarioMomento: producto.inventarioMomento || producto.disponibleMomento || 0,
+        disponibleMomento: producto.disponibleMomento || producto.inventarioMomento || 0,
+        stockMomento: producto.stockMomento || 0,
+        reservadaMomento: producto.reservadaMomento || 0,
+        fueCambiado: !!producto.fueCambiado,
+        productoOriginalNombre: producto.productoOriginalNombre || "",
+        codigoProductoOriginal: producto.codigoProductoOriginal || "",
+        productoCambioNombre: producto.productoCambioNombre || "",
+        productoCambioCodigo: producto.productoCambioCodigo || "",
+        productoCambioUnidad: producto.productoCambioUnidad || "",
+        cambioProducto: producto.cambioProducto || "",
+        motivoCambio: producto.motivoCambio || "",
         esOtroProducto: !!producto.esOtroProducto,
         otroProductoNombre: producto.otroProductoNombre || "",
       },
@@ -1811,6 +1978,9 @@ async function getHistorialData() {
     const f = item.fields || {};
     const historialId = getLookupIdValue(f, ["HistorialRecetaId", "HistorialReceta", "Historial"]);
     const arr = detalleMap.get(historialId) || [];
+    const rawDosis = String(getFieldValue(f, ["Dosis"]) || "");
+    const meta = parseAppMeta(rawDosis);
+    const fueCambiado = parseBoolean(getFieldValue(f, ["FueCambiado", "Fue Cambiado", "ProductoCambiado"])) || !!meta.fueCambiado;
     arr.push({
       productoNombre: String(getFieldValue(f, ["ProductoNombre", "Producto Nombre"]) || "").trim(),
       codigoProducto: String(getFieldValue(f, ["CodigoProducto", "CódigoProducto", "Codigo"]) || "").trim(),
@@ -1821,7 +1991,19 @@ async function getHistorialData() {
         getFieldValue(f, ["PorcentajeCumplimiento", "Porcentaje Cumplimiento"]),
         0
       ),
-      dosis: String(getFieldValue(f, ["Dosis"]) || "").trim(),
+      dosis: stripAppMeta(rawDosis),
+      precioVenta: firstNumber(getFieldValue(f, ["PrecioVenta", "Precio Venta"]), meta.precioVenta, 0),
+      totalVenta: firstNumber(getFieldValue(f, ["TotalVenta", "Total Venta"]), meta.totalVenta, 0),
+      inventarioMomento: firstNumber(getFieldValue(f, ["InventarioMomento", "Inventario Momento", "DisponibleMomento", "Disponible Momento", "Inventario"]), meta.inventarioMomento, meta.disponibleMomento, 0),
+      disponibleMomento: firstNumber(getFieldValue(f, ["DisponibleMomento", "Disponible Momento", "Disponible", "InventarioMomento", "Inventario Momento"]), meta.disponibleMomento, meta.inventarioMomento, 0),
+      fueCambiado,
+      productoOriginalNombre: firstText(getFieldValue(f, ["ProductoOriginalNombre", "Producto Original Nombre", "ProductoOriginal"]), meta.productoOriginalNombre),
+      codigoProductoOriginal: firstText(getFieldValue(f, ["CodigoProductoOriginal", "Codigo Producto Original", "Código Producto Original"]), meta.codigoProductoOriginal),
+      productoCambioNombre: firstText(getFieldValue(f, ["ProductoCambioNombre", "Producto Cambio Nombre", "ProductoNuevo", "Producto Nuevo"]), meta.productoCambioNombre),
+      productoCambioCodigo: firstText(getFieldValue(f, ["CodigoProductoCambio", "Codigo Producto Cambio", "Código Producto Cambio"]), meta.productoCambioCodigo),
+      productoCambioUnidad: firstText(meta.productoCambioUnidad),
+      cambioProducto: firstText(getFieldValue(f, ["CambioProducto", "Cambio Producto", "Cambio"]), meta.cambioProducto),
+      motivoCambio: firstText(getFieldValue(f, ["MotivoCambio", "Motivo Cambio"]), meta.motivoCambio),
       esOtroProducto: parseBoolean(getFieldValue(f, ["EsOtroProducto", "Es Otro Producto"])),
       otroProductoNombre: String(getFieldValue(f, ["OtroProductoNombre", "Otro Producto Nombre"]) || "").trim(),
     });
@@ -1836,6 +2018,8 @@ async function getHistorialData() {
       getFieldValue(f, ["PorcentajeCumplimiento", "Porcentaje Cumplimiento"]),
       0
     );
+    const rawObservacion = String(getFieldValue(f, ["Observacion", "Observación"]) || "");
+    const meta = parseAppMeta(rawObservacion);
 
     return {
       id,
@@ -1845,7 +2029,17 @@ async function getHistorialData() {
       ingenieroNombre: String(getFieldValue(f, ["Ingeniero"]) || "").trim(),
       sucursalNombre: String(getFieldValue(f, ["Sucursal"]) || "").trim(),
       factura: String(getFieldValue(f, ["Factura"]) || "").trim(),
+      observacion: firstText(stripAppMeta(rawObservacion), meta.observacionGeneral),
+      observacionEntrega: firstText(getFieldValue(f, ["ObservacionEntrega", "Observación Entrega", "ObservacionSucursal", "Observación Sucursal"]), meta.observacionEntrega),
+      paraCuantoEs: firstText(getFieldValue(f, ["ParaCuantoEs", "Para Cuanto Es", "ParaCuanto", "Para cuánto es", "Para Cuánto Es"]), meta.paraCuantoEs),
+      lotesCultivos: firstText(getFieldValue(f, ["LotesCultivos", "Lotes Cultivos", "Lotes", "Cultivos", "LoteCultivo", "Lote/Cultivo"]), meta.lotesCultivos),
+      precioTotalVenta: firstNumber(getFieldValue(f, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), meta.precioTotalVenta, 0),
+      totalSolicitado: safeNumber(getFieldValue(f, ["TotalSolicitado"]), 0),
+      totalEntregado: safeNumber(getFieldValue(f, ["TotalEntregado"]), 0),
+      productosCompletos: safeNumber(getFieldValue(f, ["ProductosCompletos"]), 0),
+      totalProductos: safeNumber(getFieldValue(f, ["TotalProductos"]), productos.length),
       cumplimiento,
+      porcentajeCumplimiento: cumplimiento,
       finalizadaAt: String(getFieldValue(f, ["FechaConfirmacion"]) || ""),
       productos,
     };
@@ -1866,7 +2060,17 @@ async function getHistorialData() {
       ingenieroNombre: x.ingenieroNombre,
       sucursalNombre: x.sucursalNombre,
       factura: x.factura || "",
+      observacion: x.observacion || "",
+      observacionEntrega: x.observacionEntrega || "",
+      paraCuantoEs: x.paraCuantoEs || "",
+      lotesCultivos: x.lotesCultivos || "",
+      precioTotalVenta: x.precioTotalVenta || 0,
+      totalSolicitado: x.totalSolicitado || 0,
+      totalEntregado: x.totalEntregado || 0,
+      productosCompletos: x.productosCompletos || 0,
+      totalProductos: x.totalProductos || (x.productos || []).length,
       cumplimiento: x.porcentajeCumplimiento || calcPercent(x.totalEntregado, x.totalSolicitado),
+      porcentajeCumplimiento: x.porcentajeCumplimiento || calcPercent(x.totalEntregado, x.totalSolicitado),
       finalizadaAt: x.fechaConfirmacion || "",
       productos: (x.productos || []).map((p) => ({
         productoNombre: p.productoNombre,
@@ -1875,6 +2079,19 @@ async function getHistorialData() {
         cantidadRecetada: p.cantidad,
         cantidadEntregada: p.cantidadEntregada || 0,
         porcentaje: calcPercent(p.cantidadEntregada || 0, p.cantidad || 0),
+        porcentajeCumplimiento: calcPercent(p.cantidadEntregada || 0, p.cantidad || 0),
+        dosis: p.dosis || "",
+        precioVenta: p.precioVenta || 0,
+        totalVenta: p.totalVenta || 0,
+        inventarioMomento: p.inventarioMomento || p.disponibleMomento || 0,
+        disponibleMomento: p.disponibleMomento || p.inventarioMomento || 0,
+        fueCambiado: !!p.fueCambiado,
+        productoOriginalNombre: p.productoOriginalNombre || "",
+        codigoProductoOriginal: p.codigoProductoOriginal || "",
+        productoCambioNombre: p.productoCambioNombre || "",
+        productoCambioCodigo: p.productoCambioCodigo || "",
+        cambioProducto: p.cambioProducto || "",
+        motivoCambio: p.motivoCambio || "",
       })),
     }))
     .sort((a, b) => b.id - a.id);
@@ -2430,6 +2647,10 @@ app.post("/api/recetas/ingeniero", authMiddleware, async (req, res) => {
         dosis: String(item.dosis || "").trim(),
         precioVenta: safeNumber(item.precioVenta, safeNumber(producto?.precioVenta, 0)),
         totalVenta: round2(safeNumber(item.totalVenta, safeNumber(item.cantidad, 0) * safeNumber(item.precioVenta, safeNumber(producto?.precioVenta, 0)))),
+        inventarioMomento: safeNumber(item.inventarioMomento ?? item.disponibleMomento ?? item.disponible ?? producto?.disponible ?? producto?.stock, 0),
+        disponibleMomento: safeNumber(item.disponibleMomento ?? item.disponible ?? producto?.disponible ?? producto?.stock, 0),
+        stockMomento: safeNumber(item.stockMomento ?? item.stock ?? producto?.stock, 0),
+        reservadaMomento: safeNumber(item.reservadaMomento ?? item.reservada ?? producto?.reservada, 0),
         productoSqlId: safeNumber(item.productoSqlId ?? item.productoId, 0),
         esProductoSql: !!item.esProductoSql || USE_SQL_CATALOGS,
         esOtroProducto,
@@ -2695,6 +2916,10 @@ app.post("/api/recetas/sucursal/:id/confirmar", authMiddleware, async (req, res)
             dosis: mapped.dosis || "",
             precioVenta: precioVentaFinal,
             totalVenta: totalVentaDetalle,
+            inventarioMomento: mapped.inventarioMomento || mapped.disponibleMomento || 0,
+            disponibleMomento: mapped.disponibleMomento || mapped.inventarioMomento || 0,
+            stockMomento: mapped.stockMomento || 0,
+            reservadaMomento: mapped.reservadaMomento || 0,
             esProductoSql: USE_SQL_CATALOGS || !!mapped.productoSqlId,
             esOtroProducto: !!mapped.esOtroProducto,
             otroProductoNombre: mapped.otroProductoNombre || "",
@@ -2715,10 +2940,19 @@ app.post("/api/recetas/sucursal/:id/confirmar", authMiddleware, async (req, res)
     const recetaColumns = await getListColumns(LIST_NAMES.recetaIngeniero, false);
     const recipeUpdate = {};
 
+    const recetaObservacionConMeta = withAppMeta(String(receta.observacion || ""), {
+      paraCuantoEs: receta.paraCuantoEs,
+      lotesCultivos: receta.lotesCultivos,
+      precioTotalVenta: round2(precioTotalVentaFinal || receta.precioTotalVenta || 0),
+      observacionGeneral: receta.observacion,
+      observacionEntrega: String(observacion || ""),
+    });
+
     setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["Estado"]), "Entregada");
     setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["FechaConfirmacion"]), nowIso());
     setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["Factura"]), String(factura || ""));
-    setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["Observacion", "Observación"]), String(observacion || ""));
+    setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["Observacion", "Observación"]), recetaObservacionConMeta);
+    setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["ObservacionEntrega", "Observación Entrega", "ObservacionSucursal", "Observación Sucursal"]), String(observacion || ""));
     setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["TotalSolicitado"]), totalSolicitado);
     setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["TotalEntregado"]), totalEntregado);
     setIfExists(recipeUpdate, resolveWriteName(recetaColumns, ["PrecioTotalVenta", "Precio Total Venta", "TotalVenta", "Total Venta"]), round2(precioTotalVentaFinal || receta.precioTotalVenta || 0));

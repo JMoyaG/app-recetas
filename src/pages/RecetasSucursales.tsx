@@ -29,12 +29,18 @@ type RecetaProducto = {
   dosis?: string;
   precioVenta?: number;
   totalVenta?: number;
+  inventarioMomento?: number;
+  disponibleMomento?: number;
+  stockMomento?: number;
+  reservadaMomento?: number;
   fueCambiado?: boolean;
   productoOriginalNombre?: string;
   codigoProductoOriginal?: string;
   productoCambioNombre?: string;
   productoCambioCodigo?: string;
+  productoCambioUnidad?: string;
   cambioProducto?: string;
+  motivoCambio?: string;
 };
 
 type Receta = {
@@ -50,6 +56,7 @@ type Receta = {
   paraCuantoEs?: string;
   lotesCultivos?: string;
   observacion?: string;
+  observacionEntrega?: string;
   precioTotalVenta?: number;
   productos?: RecetaProducto[];
 };
@@ -90,6 +97,11 @@ function formatMoney(value?: number) {
     currency: "CRC",
     maximumFractionDigits: 0,
   });
+}
+
+function formatCantidad(value?: number) {
+  const n = Number(value || 0);
+  return n.toLocaleString("es-CR", { maximumFractionDigits: 2 });
 }
 
 function escapeHtml(value: unknown) {
@@ -303,7 +315,7 @@ function RecetasSucursales() {
     );
   }
 
-  function imprimirRecetaPDF(receta: Receta, facturaNumero: string, observacionTexto: string) {
+  function imprimirRecetaPDF(receta: Receta, facturaNumero: string, observacionTexto: string, ventanaPdf?: Window | null) {
     const productos = Array.isArray(receta.productos) ? receta.productos : [];
 
     const productosHtml = productos
@@ -316,14 +328,21 @@ function RecetasSucursales() {
           ? `${p.productoCodigo || "-"} -> ${estado.productoCambioCodigo}`
           : p.productoCodigo || "-";
         const cantidadTexto = `${Number(estado?.cantidadEntregada ?? p.cantidad ?? 0)} de ${Number(p.cantidad || 0)}`;
+        const inventarioTexto = Number(p.inventarioMomento ?? p.disponibleMomento ?? 0) > 0
+          ? `Inventario al crear: ${formatCantidad(Number(p.inventarioMomento ?? p.disponibleMomento ?? 0))}`
+          : "-";
+        const cambioTexto = estado?.fueCambiado && estado.productoCambioNombre
+          ? `Cambio: ${p.productoNombre || "Original"} -> ${estado.productoCambioNombre}${estado.motivoCambio ? ` | Motivo: ${estado.motivoCambio}` : ""}`
+          : "";
         return `
           <tr>
             <td>${index + 1}</td>
-            <td>${escapeHtml(productoTexto)}</td>
+            <td>${escapeHtml(productoTexto)}${cambioTexto ? `<br/><small>${escapeHtml(cambioTexto)}</small>` : ""}</td>
             <td>${escapeHtml(codigoTexto)}</td>
             <td>${escapeHtml(estado?.productoCambioUnidad || p.unidad || "-")}</td>
             <td>${escapeHtml(cantidadTexto)}</td>
             <td>${escapeHtml(p.dosis || "-")}</td>
+            <td>${escapeHtml(inventarioTexto)}</td>
           </tr>
         `;
       })
@@ -536,7 +555,15 @@ function RecetasSucursales() {
               </div>
 
               <div class="obs-box">
-                <h3 class="obs-title">Observación</h3>
+                <h3 class="obs-title">Datos enviados por ingeniería</h3>
+                <p class="obs-text"><strong>¿Para cuánto es?:</strong> ${escapeHtml(receta.paraCuantoEs || "-")}</p>
+                <p class="obs-text"><strong>Lotes/Cultivos:</strong> ${escapeHtml(receta.lotesCultivos || "-")}</p>
+                <p class="obs-text"><strong>Observación general:</strong> ${escapeHtml(receta.observacion || "-")}</p>
+                <p class="obs-text"><strong>Precio aprox:</strong> ${escapeHtml(formatMoney(receta.precioTotalVenta || 0))}</p>
+              </div>
+
+              <div class="obs-box" style="background:#fff7ed;border-color:#fed7aa;">
+                <h3 class="obs-title" style="color:#9a3412;">Observación de entrega</h3>
                 <p class="obs-text">${escapeHtml(observacionTexto || "-")}</p>
               </div>
 
@@ -549,6 +576,7 @@ function RecetasSucursales() {
                     <th>Unidad</th>
                     <th>Cantidad</th>
                     <th>Dosis</th>
+                    <th>Inventario al crear</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -572,7 +600,7 @@ function RecetasSucursales() {
       </html>
     `;
 
-    const ventana = window.open("", "_blank", "width=1024,height=768");
+    const ventana = ventanaPdf || window.open("", "_blank", "width=1024,height=768");
     if (!ventana) {
       alert("No se pudo abrir la ventana de impresión. Verifique si el navegador está bloqueando ventanas emergentes.");
       return;
@@ -600,6 +628,14 @@ function RecetasSucursales() {
 
       if (!ok) return;
 
+      const ventanaPdf = imprimirReceta
+        ? window.open("", "_blank", "width=1024,height=768")
+        : null;
+
+      if (imprimirReceta && !ventanaPdf) {
+        alert("El navegador bloqueó la ventana del PDF. Permita ventanas emergentes para esta página.");
+      }
+
       setSaving(true);
 
       await confirmarEntregaReceta(recetaSeleccionada.id, {
@@ -621,7 +657,7 @@ function RecetasSucursales() {
       });
 
       if (imprimirReceta) {
-        imprimirRecetaPDF(recetaSeleccionada, factura, observacion);
+        imprimirRecetaPDF(recetaSeleccionada, factura, observacion, ventanaPdf);
       }
 
       cerrarModal();
@@ -840,11 +876,14 @@ function RecetasSucursales() {
                             <strong>Lotes/Cultivos:</strong> {receta.lotesCultivos}
                           </p>
                         )}
-                        {Number(receta.precioTotalVenta || 0) > 0 && (
-                          <p style={{ margin: 0 }}>
-                            <strong>Precio total venta:</strong> {formatMoney(receta.precioTotalVenta)}
+                        {!!String(receta.observacion || "").trim() && (
+                          <p style={{ margin: "0 0 8px" }}>
+                            <strong>Observación general:</strong> {receta.observacion}
                           </p>
                         )}
+                        <p style={{ margin: 0 }}>
+                          <strong>Precio aproximado:</strong> {formatMoney(receta.precioTotalVenta || 0)}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -902,6 +941,26 @@ function RecetasSucursales() {
                       background: "#fafcff",
                     }}
                   >
+                    {(receta.paraCuantoEs || receta.lotesCultivos || receta.observacion || Number(receta.precioTotalVenta || 0) >= 0) && (
+                      <div
+                        style={{
+                          background: "#f0fdf4",
+                          border: "1px solid #bbf7d0",
+                          borderRadius: 14,
+                          padding: 14,
+                          color: "#14532d",
+                          display: "grid",
+                          gap: 6,
+                        }}
+                      >
+                        <strong>Datos enviados por el ingeniero</strong>
+                        <div><strong>¿Para cuánto es?:</strong> {receta.paraCuantoEs || "-"}</div>
+                        <div><strong>Lote / Cultivo:</strong> {receta.lotesCultivos || "-"}</div>
+                        <div><strong>Observación general:</strong> {receta.observacion || "-"}</div>
+                        <div><strong>Precio aproximado:</strong> {formatMoney(receta.precioTotalVenta || 0)}</div>
+                      </div>
+                    )}
+
                     <div
                       style={{
                         display: "flex",
@@ -956,6 +1015,12 @@ function RecetasSucursales() {
                                 <strong>Dosis:</strong> {p.dosis}
                               </div>
                             )}
+                            <div style={{ marginTop: 4, fontSize: 13, color: "#15803d", fontWeight: 700 }}>
+                              Inventario al crear: {formatCantidad(Number(p.inventarioMomento ?? p.disponibleMomento ?? 0))}
+                            </div>
+                            <div style={{ marginTop: 4, fontSize: 13, color: "#475569" }}>
+                              Precio aprox: {formatMoney(p.precioVenta || 0)}
+                            </div>
                           </div>
                           <strong>{p.cantidad}</strong>
                         </div>
@@ -1063,11 +1128,14 @@ function RecetasSucursales() {
                       <strong>Lotes/Cultivos:</strong> {recetaSeleccionada.lotesCultivos}
                     </p>
                   )}
-                  {Number(recetaSeleccionada.precioTotalVenta || 0) > 0 && (
-                    <p style={{ margin: 0 }}>
-                      <strong>Precio total venta:</strong> {formatMoney(recetaSeleccionada.precioTotalVenta)}
+                  {!!String(recetaSeleccionada.observacion || "").trim() && (
+                    <p style={{ margin: "0 0 10px" }}>
+                      <strong>Observación general:</strong> {recetaSeleccionada.observacion}
                     </p>
                   )}
+                  <p style={{ margin: 0 }}>
+                    <strong>Precio aproximado:</strong> {formatMoney(recetaSeleccionada.precioTotalVenta || 0)}
+                  </p>
                 </div>
               </div>
 
@@ -1139,6 +1207,12 @@ function RecetasSucursales() {
                                 <strong>Dosis:</strong> {producto.dosis}
                               </div>
                             )}
+                            <div style={{ marginTop: 4, color: "#15803d", fontWeight: 700 }}>
+                              <strong>Inventario al crear receta:</strong> {formatCantidad(Number(producto.inventarioMomento ?? producto.disponibleMomento ?? 0))}
+                            </div>
+                            <div style={{ marginTop: 4 }}>
+                              <strong>Precio aprox producto:</strong> {formatMoney(producto.precioVenta || 0)}
+                            </div>
                           </div>
                         </div>
 

@@ -137,6 +137,10 @@ export type RecetaProducto = {
   dosis?: string;
   precioVenta?: number;
   totalVenta?: number;
+  inventarioMomento?: number;
+  disponibleMomento?: number;
+  stockMomento?: number;
+  reservadaMomento?: number;
   fueCambiado?: boolean;
   productoOriginalNombre?: string;
   codigoProductoOriginal?: string;
@@ -165,6 +169,7 @@ export type RecetaIngeniero = {
   finalizadaAt?: string;
   factura?: string;
   observacion?: string;
+  observacionEntrega?: string;
   paraCuantoEs?: string;
   lotesCultivos?: string;
   precioTotalVenta?: number;
@@ -197,6 +202,10 @@ export type RecetaIngenieroPayload = {
     unidad?: string;
     precioVenta?: number;
     totalVenta?: number;
+    inventarioMomento?: number;
+    disponibleMomento?: number;
+    stockMomento?: number;
+    reservadaMomento?: number;
     productoSqlId?: number;
     esProductoSql?: boolean;
   }>;
@@ -238,6 +247,10 @@ export type HistorialRecetaSP = {
   finalizadaAt?: string;
   factura?: string;
   observacion?: string;
+  observacionEntrega?: string;
+  paraCuantoEs?: string;
+  lotesCultivos?: string;
+  precioTotalVenta?: number;
   porcentajeCumplimiento: number;
   cumplimiento: number;
   totalSolicitado: number;
@@ -248,18 +261,24 @@ export type HistorialRecetaSP = {
     productoNombre?: string;
     codigoProducto?: string;
     unidad?: string;
+    dosis?: string;
     cantidadRecetada: number;
     cantidadEntregada: number;
     porcentajeCumplimiento: number;
     porcentaje: number;
     precioVenta?: number;
     totalVenta?: number;
+    inventarioMomento?: number;
+    disponibleMomento?: number;
+    stockMomento?: number;
+    reservadaMomento?: number;
     fueCambiado?: boolean;
     productoOriginalNombre?: string;
     codigoProductoOriginal?: string;
     productoCambioNombre?: string;
     productoCambioCodigo?: string;
     cambioProducto?: string;
+    motivoCambio?: string;
   }>;
 };
 
