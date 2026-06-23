@@ -315,8 +315,9 @@ function RecetasSucursales() {
     );
   }
 
-  function imprimirRecetaPDF(receta: Receta, facturaNumero: string, observacionTexto: string, ventanaPdf?: Window | null) {
-    const productos = Array.isArray(receta.productos) ? receta.productos : [];
+  function imprimirRecetaPDF(receta: Receta, facturaNumero: string, observacionTexto: string, ventanaPdf?: Window | null): boolean {
+    try {
+      const productos = Array.isArray(receta.productos) ? receta.productos : [];
 
     const productosHtml = productos
       .map((p, index) => {
@@ -600,18 +601,30 @@ function RecetasSucursales() {
       </html>
     `;
 
-    const ventana = ventanaPdf || window.open("", "_blank", "width=1024,height=768");
-    if (!ventana) {
-      alert("No se pudo abrir la ventana de impresión. Verifique si el navegador está bloqueando ventanas emergentes.");
-      return;
-    }
+      const ventana = ventanaPdf || window.open("", "_blank", "width=1024,height=768");
+      if (!ventana) {
+        alert("La confirmación se guardó, pero el navegador bloqueó la ventana del PDF. Permita ventanas emergentes para esta página.");
+        return false;
+      }
 
-    ventana.document.open();
-    ventana.document.write(html);
-    ventana.document.close();
+      ventana.document.open();
+      ventana.document.write(html);
+      ventana.document.close();
+      return true;
+    } catch (error) {
+      console.error("Error generando PDF de receta:", error);
+      try {
+        if (ventanaPdf && !ventanaPdf.closed) ventanaPdf.close();
+      } catch {
+        // Ignorar errores cerrando la ventana auxiliar.
+      }
+      alert("La confirmación se guardó, pero no se pudo abrir/imprimir el PDF. Puede revisar la receta en historial.");
+      return false;
+    }
   }
 
   async function finalizarConfirmacion() {
+    let ventanaPdf: Window | null = null;
     try {
       if (!recetaSeleccionada) return;
 
@@ -628,17 +641,27 @@ function RecetasSucursales() {
 
       if (!ok) return;
 
-      const ventanaPdf = imprimirReceta
+      ventanaPdf = imprimirReceta
         ? window.open("", "_blank", "width=1024,height=768")
         : null;
 
+      if (imprimirReceta && ventanaPdf) {
+        try {
+          ventanaPdf.document.open();
+          ventanaPdf.document.write(`<!DOCTYPE html><html><head><title>Generando PDF...</title><meta charset="UTF-8" /></head><body style="font-family: Arial, sans-serif; padding: 32px; color: #14532d;"><h2>Generando comprobante...</h2><p>Espere un momento, la receta se está confirmando.</p></body></html>`);
+          ventanaPdf.document.close();
+        } catch {
+          // Si no se puede escribir la ventana temporal, igual se finaliza la confirmación.
+        }
+      }
+
       if (imprimirReceta && !ventanaPdf) {
-        alert("El navegador bloqueó la ventana del PDF. Permita ventanas emergentes para esta página.");
+        alert("El navegador bloqueó la ventana del PDF. La confirmación continuará, pero permita ventanas emergentes para imprimir.");
       }
 
       setSaving(true);
 
-      await confirmarEntregaReceta(recetaSeleccionada.id, {
+      const recetaConfirmada = await confirmarEntregaReceta(recetaSeleccionada.id, {
         factura,
         observacion,
         detalles: productosConfirmacion.map((p) => ({
@@ -657,14 +680,20 @@ function RecetasSucursales() {
       });
 
       if (imprimirReceta) {
-        imprimirRecetaPDF(recetaSeleccionada, factura, observacion, ventanaPdf);
+        imprimirRecetaPDF((recetaConfirmada || recetaSeleccionada) as Receta, factura, observacion, ventanaPdf);
       }
 
       cerrarModal();
       await loadRecetas();
     } catch (error) {
       console.error("Error confirmando entrega:", error);
-      alert("No se pudo finalizar la confirmación");
+      try {
+        if (ventanaPdf && !ventanaPdf.closed) ventanaPdf.close();
+      } catch {
+        // Ignorar errores cerrando la ventana auxiliar.
+      }
+      const mensaje = error instanceof Error && error.message ? `: ${error.message}` : "";
+      alert(`No se pudo finalizar la confirmación${mensaje}`);
     } finally {
       setSaving(false);
     }
