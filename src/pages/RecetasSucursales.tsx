@@ -867,9 +867,7 @@ function RecetasSucursales() {
                             <strong>Observación general:</strong> {receta.observacion}
                           </p>
                         )}
-                        <p style={{ margin: 0 }}>
-                          <strong>Precio aproximado:</strong> {formatMoney(receta.precioTotalVenta || 0)}
-                        </p>
+                        
                       </div>
                     </div>
                   </div>
@@ -943,7 +941,7 @@ function RecetasSucursales() {
                         <div><strong>¿Para cuánto es?:</strong> {receta.paraCuantoEs || "-"}</div>
                         <div><strong>Lote / Cultivo:</strong> {receta.lotesCultivos || "-"}</div>
                         <div><strong>Observación general:</strong> {receta.observacion || "-"}</div>
-                        <div><strong>Precio aproximado:</strong> {formatMoney(receta.precioTotalVenta || 0)}</div>
+                        
                       </div>
                     )}
 
@@ -1119,9 +1117,7 @@ function RecetasSucursales() {
                       <strong>Observación general:</strong> {recetaSeleccionada.observacion}
                     </p>
                   )}
-                  <p style={{ margin: 0 }}>
-                    <strong>Precio aproximado:</strong> {formatMoney(recetaSeleccionada.precioTotalVenta || 0)}
-                  </p>
+                  
                 </div>
               </div>
 

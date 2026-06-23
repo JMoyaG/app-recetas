@@ -1561,14 +1561,7 @@ export default function RecetasIngeniero() {
                         <button type="button" onClick={() => setProductosSeleccionados((prev) => prev.filter((p) => p.key !== item.key))} style={{ border: "1px solid #fecaca", background: "#fff1f2", color: "#be123c", borderRadius: 10, padding: "10px 12px", cursor: "pointer", fontWeight: 700 }}>Quitar</button>
                       </div>
                     ))}
-                    <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", color: "#166534", borderRadius: 14, padding: 14, fontWeight: 900, textAlign: "right" }}>
-                      Precio aproximado total de venta: {formatMoney(precioTotalVenta)}
-                      {precioTotalVenta <= 0 && (
-                        <div style={{ marginTop: 4, fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-                          Pendiente conectar precio real en SQL. No se muestra precio unitario.
-                        </div>
-                      )}
-                    </div>
+                    
                   </div>
                 )}
               </div>
