@@ -62,6 +62,7 @@ type Receta = {
 };
 
 type ProductoConfirmacion = {
+  confirmacionKey: string;
   detalleId?: number;
   productoId: number;
   entregadoCompleto: boolean;
@@ -180,7 +181,8 @@ function RecetasSucursales() {
     setObservacion("");
     setImprimirReceta(true);
     setProductosConfirmacion(
-      productos.map((p) => ({
+      productos.map((p, index) => ({
+        confirmacionKey: `${p.detalleId ?? "sin-detalle"}-${p.productoId ?? "sin-producto"}-${index}`,
         detalleId: p.detalleId,
         productoId: Number(p.productoId),
         entregadoCompleto: true,
@@ -206,34 +208,23 @@ function RecetasSucursales() {
     setProductosConfirmacion([]);
   }
 
-  function getEstadoProducto(productoId: number, detalleId?: number) {
-    return productosConfirmacion.find(
-      (p) =>
-        (detalleId && p.detalleId ? Number(p.detalleId) === Number(detalleId) : false) ||
-        Number(p.productoId) === Number(productoId)
-    );
+  function getEstadoProducto(confirmacionKey: string) {
+    return productosConfirmacion.find((p) => p.confirmacionKey === confirmacionKey);
   }
 
   function updateProductoConfirmacion(
-    productoId: number,
-    detalleId: number | undefined,
+    confirmacionKey: string,
     updater: (item: ProductoConfirmacion) => ProductoConfirmacion
   ) {
     setProductosConfirmacion((prev) =>
-      prev.map((p) => {
-        const same =
-          (detalleId && p.detalleId ? Number(p.detalleId) === Number(detalleId) : false) ||
-          Number(p.productoId) === Number(productoId);
-        return same ? updater(p) : p;
-      })
+      prev.map((p) => (p.confirmacionKey === confirmacionKey ? updater(p) : p))
     );
   }
 
-  function toggleCambioProducto(producto: RecetaProducto, checked: boolean) {
-    updateProductoConfirmacion(producto.productoId, producto.detalleId, (item) => ({
+  function toggleCambioProducto(confirmacionKey: string, checked: boolean) {
+    updateProductoConfirmacion(confirmacionKey, (item) => ({
       ...item,
       fueCambiado: checked,
-      // Si la sucursal cambia el producto, el producto recetado original NO cuenta como cumplido.
       entregadoCompleto: checked ? false : item.entregadoCompleto,
       cantidadEntregada: checked ? 0 : item.cantidadEntregada,
       productoCambioId: checked ? item.productoCambioId || 0 : 0,
@@ -245,9 +236,9 @@ function RecetasSucursales() {
     }));
   }
 
-  function cambiarProductoCambio(producto: RecetaProducto, productoCambioId: number) {
+  function cambiarProductoCambio(confirmacionKey: string, productoCambioId: number) {
     const nuevo = productosCatalogo.find((p) => Number(p.id) === Number(productoCambioId));
-    updateProductoConfirmacion(producto.productoId, producto.detalleId, (item) => ({
+    updateProductoConfirmacion(confirmacionKey, (item) => ({
       ...item,
       fueCambiado: Number(productoCambioId) > 0,
       productoCambioId: Number(productoCambioId || 0),
@@ -258,53 +249,32 @@ function RecetasSucursales() {
     }));
   }
 
-  function cambiarMotivoCambio(producto: RecetaProducto, motivoCambio: string) {
-    updateProductoConfirmacion(producto.productoId, producto.detalleId, (item) => ({
+  function cambiarMotivoCambio(confirmacionKey: string, motivoCambio: string) {
+    updateProductoConfirmacion(confirmacionKey, (item) => ({
       ...item,
       motivoCambio,
     }));
   }
 
   function toggleProductoCompleto(
-    productoId: number,
+    confirmacionKey: string,
     entregadoCompleto: boolean,
-    cantidadRecetada: number,
-    detalleId?: number
+    cantidadRecetada: number
   ) {
-    setProductosConfirmacion((prev) =>
-      prev.map((p) => {
-        const same =
-          (detalleId && p.detalleId ? Number(p.detalleId) === Number(detalleId) : false) ||
-          Number(p.productoId) === Number(productoId);
-
-        if (!same) return p;
-
-        return {
-          ...p,
-          entregadoCompleto,
-          cantidadEntregada: entregadoCompleto
-            ? Number(cantidadRecetada)
-            : Number(p.cantidadEntregada ?? 0),
-        };
-      })
-    );
+    updateProductoConfirmacion(confirmacionKey, (item) => ({
+      ...item,
+      entregadoCompleto,
+      cantidadEntregada: entregadoCompleto
+        ? Number(cantidadRecetada)
+        : Number(item.cantidadEntregada ?? 0),
+    }));
   }
 
-  function cambiarCantidadEntregada(productoId: number, cantidad: number, detalleId?: number) {
-    setProductosConfirmacion((prev) =>
-      prev.map((p) => {
-        const same =
-          (detalleId && p.detalleId ? Number(p.detalleId) === Number(detalleId) : false) ||
-          Number(p.productoId) === Number(productoId);
-
-        if (!same) return p;
-
-        return {
-          ...p,
-          cantidadEntregada: cantidad < 0 ? 0 : cantidad,
-        };
-      })
-    );
+  function cambiarCantidadEntregada(confirmacionKey: string, cantidad: number) {
+    updateProductoConfirmacion(confirmacionKey, (item) => ({
+      ...item,
+      cantidadEntregada: cantidad < 0 ? 0 : cantidad,
+    }));
   }
 
   function imprimirRecetaPDF(receta: Receta, facturaNumero: string, observacionTexto: string, ventanaPdf?: Window | null): boolean {
@@ -312,8 +282,9 @@ function RecetasSucursales() {
       const productos = Array.isArray(receta.productos) ? receta.productos : [];
 
       const productosHtml = productos
-        .map((p) => {
-          const estado = getEstadoProducto(p.productoId, p.detalleId);
+        .map((p, index) => {
+          const confirmacionKey = `${p.detalleId ?? "sin-detalle"}-${p.productoId ?? "sin-producto"}-${index}`;
+          const estado = getEstadoProducto(confirmacionKey);
           const originalNombre =
             p.productoOriginalNombre ||
             p.productoNombre ||
@@ -1121,7 +1092,8 @@ function RecetasSucursales() {
 
               <div style={{ display: "grid", gap: 12, marginBottom: 22 }}>
                 {(recetaSeleccionada.productos || []).map((producto, index) => {
-                  const estado = getEstadoProducto(producto.productoId, producto.detalleId);
+                  const confirmacionKey = `${producto.detalleId ?? "sin-detalle"}-${producto.productoId ?? "sin-producto"}-${index}`;
+                  const estado = getEstadoProducto(confirmacionKey);
 
                   return (
                     <div
@@ -1157,10 +1129,9 @@ function RecetasSucursales() {
                               checked={!!estado?.entregadoCompleto}
                               onChange={(e) =>
                                 toggleProductoCompleto(
-                                  producto.productoId,
+                                  confirmacionKey,
                                   e.target.checked,
-                                  Number(producto.cantidad || 0),
-                                  producto.detalleId
+                                  Number(producto.cantidad || 0)
                                 )
                               }
                             />
@@ -1221,9 +1192,8 @@ function RecetasSucursales() {
                             value={Number(estado?.cantidadEntregada || 0)}
                             onChange={(e) =>
                               cambiarCantidadEntregada(
-                                producto.productoId,
-                                Number(e.target.value || 0),
-                                producto.detalleId
+                                confirmacionKey,
+                                Number(e.target.value || 0)
                               )
                             }
                             style={{
@@ -1242,7 +1212,7 @@ function RecetasSucursales() {
                           <input
                             type="checkbox"
                             checked={!!estado?.fueCambiado}
-                            onChange={(e) => toggleCambioProducto(producto, e.target.checked)}
+                            onChange={(e) => toggleCambioProducto(confirmacionKey, e.target.checked)}
                           />
                           Cambiar este producto por otro
                         </label>
@@ -1251,7 +1221,7 @@ function RecetasSucursales() {
                           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
                             <select
                               value={Number(estado?.productoCambioId || 0)}
-                              onChange={(e) => cambiarProductoCambio(producto, Number(e.target.value || 0))}
+                              onChange={(e) => cambiarProductoCambio(confirmacionKey, Number(e.target.value || 0))}
                               style={{ width: "100%", borderRadius: 12, border: "1px solid #d9e2ec", padding: "12px 14px", fontSize: 15 }}
                             >
                               <option value={0}>Seleccione producto nuevo...</option>
@@ -1271,7 +1241,7 @@ function RecetasSucursales() {
                             <input
                               type="text"
                               value={estado.motivoCambio || ""}
-                              onChange={(e) => cambiarMotivoCambio(producto, e.target.value)}
+                              onChange={(e) => cambiarMotivoCambio(confirmacionKey, e.target.value)}
                               placeholder="Motivo del cambio u observación del producto..."
                               style={{ width: "100%", borderRadius: 12, border: "1px solid #d9e2ec", padding: "12px 14px", fontSize: 15 }}
                             />
